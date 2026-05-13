@@ -1,380 +1,649 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ProcureFlow — Procurement Tracker</title>
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-  <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html,body,#root{height:100%;overflow:hidden}
-    body{background:#0F172A;color:#E2E8F0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
-    ::-webkit-scrollbar{width:5px;height:5px}
-    ::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
-    @keyframes fadeIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:translateX(0)}}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    input:focus,select:focus{border-color:#F59E0B!important;box-shadow:0 0 0 2px rgba(245,158,11,.13)!important}
-    input,select,button{outline:none}
-    option{background:#1E293B;color:#E2E8F0}
-    button{cursor:pointer}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>ProcureFlow</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%}
+body{background:#0F172A;color:#E2E8F0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden}
+input,select,button,textarea{font-family:inherit;outline:none}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+@keyframes toast-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+input:focus,select:focus{border-color:#F59E0B!important;box-shadow:0 0 0 3px rgba(245,158,11,.15)!important}
+option{background:#1E293B;color:#E2E8F0}
+button{cursor:pointer}
+</style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
 
-/* ─── React & Supabase globals ───────────────────────────────── */
-const {useState,useEffect,useMemo,useCallback,Fragment}=React;
+/* ── Globals ────────────────────────────────────────────────── */
+var React    = window.React;
+var ReactDOM = window.ReactDOM;
+var useState    = React.useState;
+var useEffect   = React.useEffect;
+var useMemo     = React.useMemo;
+var useCallback = React.useCallback;
+var useRef      = React.useRef;
 
-/* ═══════════════════════════════════════════════════════════════
-   STEP 1 ► Replace these two values with your Supabase credentials
-   Project Settings → API → Project URL + anon/public key
-   ═══════════════════════════════════════════════════════════════ */
-const SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1eHN4cWpndHJsZHFycW91bXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTMzMjIsImV4cCI6MjA5NDIyOTMyMn0.RnxrCXzTeXp3zXyBJt3-t6JQbp3dPTdQbkqqp_NKEvI';
-/* ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   PASTE YOUR SUPABASE CREDENTIALS HERE
+   ═══════════════════════════════════════════════════ */
+var SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1eHN4cWpndHJsZHFycW91bXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTMzMjIsImV4cCI6MjA5NDIyOTMyMn0.RnxrCXzTeXp3zXyBJt3-t6JQbp3dPTdQbkqqp_NKEvI';
+/* ═══════════════════════════════════════════════════ */
 
-/* Safe init — if credentials are still placeholders, run in demo mode */
-const DEMO = !SUPABASE_URL.startsWith('https://');
-let db = null;
+var DEMO = !SUPABASE_URL.startsWith('https://');
+var db   = null;
 if (!DEMO) {
   try { db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }
-  catch(e) { console.warn('Supabase init failed:', e.message); }
+  catch(e) { console.warn('Supabase init error:', e.message); }
 }
 
-/* ─── Constants ─────────────────────────────────────────────── */
-const STAGES=['Creation','Order','Received','Delivered'];
-const SC={
-  Creation: {color:'#94A3B8',bg:'rgba(148,163,184,.12)'},
-  Order:    {color:'#60A5FA',bg:'rgba(96,165,250,.12)'},
-  Received: {color:'#FBBF24',bg:'rgba(251,191,36,.12)'},
-  Delivered:{color:'#34D399',bg:'rgba(52,211,153,.12)'},
+/* ── Constants ──────────────────────────────────────────────── */
+var STAGES = ['Creation','Order','Received','Delivered'];
+var SC = {
+  Creation : {color:'#94A3B8', bg:'rgba(148,163,184,.12)'},
+  Order    : {color:'#60A5FA', bg:'rgba(96,165,250,.12)'},
+  Received : {color:'#FBBF24', bg:'rgba(251,191,36,.12)'},
+  Delivered: {color:'#34D399', bg:'rgba(52,211,153,.12)'},
 };
-const PC=['#3B82F6','#F59E0B','#A78BFA','#34D399','#F87171','#22D3EE'];
-const CC=['#F59E0B','#3B82F6','#10B981','#8B5CF6','#EF4444','#06B6D4'];
+var PC = ['#3B82F6','#F59E0B','#A78BFA','#34D399','#F87171','#22D3EE'];
+var CC = ['#F59E0B','#3B82F6','#10B981','#8B5CF6','#EF4444','#06B6D4'];
 
-/* ─── Sample data (shown in demo mode and as first paint) ────── */
-const DEMO_PROJECTS=[
-  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',   budget:120000,color:'#3B82F6',created_at:'2026-01-15'},
-  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',         budget:80000, color:'#F59E0B',created_at:'2026-02-01'},
-  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000,color:'#A78BFA',created_at:'2026-03-10'},
+/* ── Demo data ──────────────────────────────────────────────── */
+var DEMO_PROJECTS = [
+  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, color:'#3B82F6', created_at:'2026-01-15'},
+  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  color:'#F59E0B', created_at:'2026-02-01'},
+  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, color:'#A78BFA', created_at:'2026-03-10'},
 ];
-const DEMO_ITEMS=[
-  {id:'i1', project_id:'p1',projectId:'p1',name:'Dell XPS Workstations (x10)',   category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    cost:28000,deadline:'2026-06-15'},
-  {id:'i2', project_id:'p1',projectId:'p1',name:'Adobe Creative Suite Licenses', category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',cost:5400, deadline:'2026-05-30'},
-  {id:'i3', project_id:'p1',projectId:'p1',name:'Cloud Infrastructure (AWS)',    category:'Software',  vendor:'Amazon Web Services', status:'Delivered',cost:12000,deadline:'2026-05-01'},
-  {id:'i4', project_id:'p1',projectId:'p1',name:'Cisco Network Equipment',       category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', cost:22000,deadline:'2026-08-01'},
-  {id:'i5', project_id:'p2',projectId:'p2',name:'Office Furniture Package',      category:'Facilities',vendor:'Herman Miller',       status:'Order',    cost:8500, deadline:'2026-07-01'},
-  {id:'i6', project_id:'p2',projectId:'p2',name:'Conference AV System',          category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', cost:15000,deadline:'2026-06-20'},
-  {id:'i7', project_id:'p2',projectId:'p2',name:'Ergonomic Chairs (x20)',        category:'Facilities',vendor:'Steelcase',           status:'Received', cost:9600, deadline:'2026-05-15'},
-  {id:'i8', project_id:'p3',projectId:'p3',name:'Server Rack Systems (x4)',      category:'Hardware',  vendor:'Supermicro',          status:'Order',    cost:45000,deadline:'2026-07-15'},
-  {id:'i9', project_id:'p3',projectId:'p3',name:'Cooling Infrastructure',        category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', cost:38000,deadline:'2026-08-01'},
-  {id:'i10',project_id:'p3',projectId:'p3',name:'UPS Power Systems',             category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', cost:22000,deadline:'2026-08-15'},
+var DEMO_ITEMS = [
+  {id:'i1', projectId:'p1', name:'Dell XPS Workstations (x10)',   category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    cost:28000, deadline:'2026-06-15'},
+  {id:'i2', projectId:'p1', name:'Adobe Creative Suite Licenses', category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',cost:5400,  deadline:'2026-05-30'},
+  {id:'i3', projectId:'p1', name:'Cloud Infrastructure (AWS)',    category:'Software',  vendor:'Amazon Web Services', status:'Delivered',cost:12000, deadline:'2026-05-01'},
+  {id:'i4', projectId:'p1', name:'Cisco Network Equipment',       category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', cost:22000, deadline:'2026-08-01'},
+  {id:'i5', projectId:'p2', name:'Office Furniture Package',      category:'Facilities',vendor:'Herman Miller',       status:'Order',    cost:8500,  deadline:'2026-07-01'},
+  {id:'i6', projectId:'p2', name:'Conference AV System',          category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', cost:15000, deadline:'2026-06-20'},
+  {id:'i7', projectId:'p2', name:'Ergonomic Chairs (x20)',        category:'Facilities',vendor:'Steelcase',           status:'Received', cost:9600,  deadline:'2026-05-15'},
+  {id:'i8', projectId:'p3', name:'Server Rack Systems (x4)',      category:'Hardware',  vendor:'Supermicro',          status:'Order',    cost:45000, deadline:'2026-07-15'},
+  {id:'i9', projectId:'p3', name:'Cooling Infrastructure',        category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', cost:38000, deadline:'2026-08-01'},
+  {id:'i10',projectId:'p3', name:'UPS Power Systems',             category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', cost:22000, deadline:'2026-08-15'},
 ];
-const DEMO_CATS=['Hardware','Software','Services','Facilities','Marketing','Legal'];
+var DEMO_CATS = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 
-/* ─── Helpers ───────────────────────────────────────────────── */
-const fmt=(v,cur='USD')=>new Intl.NumberFormat('en-US',{style:'currency',currency:cur,maximumFractionDigits:0}).format(v);
-const toApp=r=>r?{...r,projectId:r.project_id}:null;
-const toDB=d=>{const r={...d,project_id:d.projectId};delete r.projectId;return r;};
-const uid=()=>'id_'+Math.random().toString(36).slice(2)+Date.now();
+/* ── Helpers ────────────────────────────────────────────────── */
+function fmt(v, cur) {
+  return new Intl.NumberFormat('en-US',{style:'currency',currency:cur||'USD',maximumFractionDigits:0}).format(v);
+}
+function toApp(r) { return r ? Object.assign({}, r, {projectId: r.project_id}) : null; }
+function toDB(d)  { var r = Object.assign({}, d, {project_id: d.projectId}); delete r.projectId; return r; }
+function uid()    { return 'id_' + Math.random().toString(36).slice(2) + Date.now(); }
 
-/* ─── SVG Icons ─────────────────────────────────────────────── */
-const Svg=({s=16,c={},ch})=>(
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"
-    style={{flexShrink:0,...c}}>{ch}</svg>
-);
-const IGrid=p=><Svg {...p} ch={<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></>}/>;
-const IFolder=p=><Svg {...p} ch={<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>}/>;
-const IGear=p=><Svg {...p} ch={<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>}/>;
-const IPlus=p=><Svg {...p} ch={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}/>;
-const ISearch=p=><Svg {...p} ch={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>}/>;
-const IPen=p=><Svg {...p} ch={<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>}/>;
-const ITrash=p=><Svg {...p} ch={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>}/>;
-const IX=p=><Svg {...p} ch={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>}/>;
-const IDollar=p=><Svg {...p} ch={<><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></>}/>;
-const ITrend=p=><Svg {...p} ch={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>}/>;
-const IBox=p=><Svg {...p} ch={<><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>}/>;
-const IBell=p=><Svg {...p} ch={<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>}/>;
-const IOk=p=><Svg {...p} ch={<><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></>}/>;
-const ITag=p=><Svg {...p} ch={<><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></>}/>;
-const ISave=p=><Svg {...p} ch={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>}/>;
-const IPlusC=p=><Svg {...p} ch={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>}/>;
-const IWarn=p=><Svg {...p} ch={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></>}/>;
-const IChR=p=><Svg {...p} ch={<polyline points="9 18 15 12 9 6"/>}/>;
-const IChL=p=><Svg {...p} ch={<polyline points="15 18 9 12 15 6"/>}/>;
-const IArrR=p=><Svg {...p} ch={<><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>}/>;
-const IArrL=p=><Svg {...p} ch={<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>}/>;
+/* ── SVG icon paths ─────────────────────────────────────────── */
+var SVGP = {
+  dashboard: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+  folder:    '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>',
+  settings:  '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  plus:      '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+  search:    '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  edit:      '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+  trash:     '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',
+  x:         '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  dollar:    '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+  trend:     '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+  package:   '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  bell:      '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  check:     '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+  tag:       '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+  save:      '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>',
+  plusc:     '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+  alert:     '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+  chevr:     '<polyline points="9 18 15 12 9 6"/>',
+  chevl:     '<polyline points="15 18 9 12 15 6"/>',
+  arrr:      '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  arrl:      '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+  logout:    '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  mail:      '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
+  lock:      '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  eye:       '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  eyeoff:    '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+};
 
-/* ─── SVG Bar Chart ─────────────────────────────────────────── */
-function BarChart({data,h=200,currency}){
-  if(!data||!data.length) return <div style={{height:h,display:'flex',alignItems:'center',justifyContent:'center',color:'#334155',fontSize:12}}>No data</div>;
-  const max=Math.max(...data.map(d=>d.spend),1);
-  const PL=44,PR=6,PT=10,PB=36;
-  const VW=360,VH=h;
-  const cW=VW-PL-PR,cH=VH-PT-PB;
-  const bW=Math.min(36,Math.max(8,cW/data.length-12));
-  const sp=(cW-data.length*bW)/(data.length+1);
+/* ── Icon component ─────────────────────────────────────────── */
+function Ico(props) {
+  var n = props.n, size = props.size || 16, color = props.color, style = props.style || {};
+  var svgStyle = Object.assign({flexShrink:0, display:'block'}, style);
   return (
-    <svg viewBox={'0 0 '+VW+' '+VH} style={{width:'100%',height:h}}>
-      {[0,.5,1].map(f=>{
-        const y=PT+cH-f*cH;
-        const v=f*max;
-        return <g key={f}>
-          <line x1={PL} y1={y} x2={VW-PR} y2={y} stroke="#1E293B" strokeWidth="1"/>
-          <text x={PL-4} y={y+4} textAnchor="end" fill="#475569" fontSize="9">
-            {v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v.toFixed(0)}
-          </text>
-        </g>;
-      })}
-      {data.map((d,i)=>{
-        const bH=Math.max(3,(d.spend/max)*cH);
-        const x=PL+sp+i*(bW+sp);
-        const y=PT+cH-bH;
-        const lbl=d.name.length>9?d.name.slice(0,8)+'…':d.name;
-        return <g key={i}>
-          <rect x={x} y={y} width={bW} height={bH} fill={d.color} rx="3" opacity=".85"/>
-          <text x={x+bW/2} y={VH-PB+14} textAnchor="middle" fill="#475569" fontSize="9.5">{lbl}</text>
-        </g>;
-      })}
+    <svg
+      width={size} height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color || 'currentColor'}
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={svgStyle}
+      dangerouslySetInnerHTML={{__html: SVGP[n] || ''}}
+    />
+  );
+}
+
+/* ── Bar chart (pure SVG) ───────────────────────────────────── */
+function BarChart(props) {
+  var data = props.data;
+  var h = props.height || 200;
+  if (!data || !data.length) {
+    return <div style={{height:h, display:'flex', alignItems:'center', justifyContent:'center', color:'#334155', fontSize:12}}>No data yet</div>;
+  }
+  var maxV = 1;
+  for (var k = 0; k < data.length; k++) { if (data[k].spend > maxV) maxV = data[k].spend; }
+  var PL=44, PR=8, PT=10, PB=40, VW=380, VH=h;
+  var cW=VW-PL-PR, cH=VH-PT-PB;
+  var bW = Math.min(38, Math.max(8, cW/data.length - 14));
+  var gap = (cW - data.length*bW) / (data.length+1);
+  var gridEls = [0, 0.5, 1].map(function(f) {
+    var y = PT + cH - f*cH;
+    var v = f * maxV;
+    var lbl = v >= 1000 ? ('$'+(v/1000).toFixed(0)+'k') : ('$'+v.toFixed(0));
+    return (
+      <g key={'g'+f}>
+        <line x1={PL} y1={y} x2={VW-PR} y2={y} stroke="#1E293B" strokeWidth="1"/>
+        <text x={PL-4} y={y+4} textAnchor="end" fill="#475569" fontSize="9">{lbl}</text>
+      </g>
+    );
+  });
+  var barEls = data.map(function(d, i) {
+    var bH = Math.max(3, (d.spend/maxV)*cH);
+    var x = PL + gap + i*(bW+gap);
+    var y = PT + cH - bH;
+    var lbl = d.name.length > 9 ? (d.name.slice(0,8)+'…') : d.name;
+    return (
+      <g key={'b'+i}>
+        <rect x={x} y={y} width={bW} height={bH} fill={d.color} rx="3" opacity="0.85"/>
+        <text x={x+bW/2} y={VH-PB+14} textAnchor="middle" fill="#475569" fontSize="9.5">{lbl}</text>
+      </g>
+    );
+  });
+  return (
+    <svg viewBox={'0 0 '+VW+' '+VH} style={{width:'100%', height:h}}>
+      {gridEls}
+      {barEls}
     </svg>
   );
 }
 
-/* ─── Shared style objects ──────────────────────────────────── */
-const INP={width:'100%',background:'#0F172A',border:'1px solid #334155',borderRadius:8,padding:'9px 12px',color:'#E2E8F0',fontSize:13.5};
-const LBL={fontSize:11.5,color:'#64748B',fontWeight:500,marginBottom:5,display:'block'};
+/* ── Pipeline dots ──────────────────────────────────────────── */
+function PipeDots(props) {
+  var stage = props.stage;
+  var idx = STAGES.indexOf(stage);
+  var els = [];
+  for (var i = 0; i < STAGES.length; i++) {
+    var s = STAGES[i];
+    var done = i < idx, act = i === idx, cfg = SC[s];
+    els.push(
+      <div key={'d'+i} style={{
+        width:8, height:8, borderRadius:'50%', flexShrink:0,
+        background: (act||done) ? cfg.color : '#334155',
+        opacity: done ? 0.5 : (act ? 1 : 0.3),
+        border: act ? ('2px solid '+cfg.color) : 'none'
+      }}/>
+    );
+    if (i < STAGES.length-1) {
+      els.push(
+        <div key={'l'+i} style={{
+          width:12, height:2,
+          background: done ? SC[STAGES[i+1]].color : '#334155',
+          opacity: done ? 0.45 : 0.2
+        }}/>
+      );
+    }
+  }
+  return <div style={{display:'flex', alignItems:'center'}}>{els}</div>;
+}
 
-/* ─── Toast ─────────────────────────────────────────────────── */
-function Toast({message,type,onClose}){
-  const c={success:'#34D399',error:'#F87171',info:'#60A5FA',warning:'#FBBF24'}[type]||'#34D399';
-  return(
-    <div style={{background:'#1E293B',border:'1px solid '+c+'40',borderLeft:'3px solid '+c,borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,minWidth:260,animation:'fadeIn .2s ease'}}>
-      <IOk s={14} c={{color:c}}/>
-      <span style={{fontSize:13,color:'#E2E8F0',flex:1}}>{message}</span>
-      <button onClick={onClose} style={{background:'none',border:'none',color:'#475569',display:'flex',padding:2}}><IX s={13}/></button>
+/* ── Toast ──────────────────────────────────────────────────── */
+function Toast(props) {
+  var message = props.message, type = props.type, onClose = props.onClose;
+  var colors = {success:'#34D399', error:'#F87171', info:'#60A5FA', warning:'#FBBF24'};
+  var c = colors[type] || '#34D399';
+  return (
+    <div style={{
+      background:'#1E293B', border:'1px solid '+c+'40', borderLeft:'3px solid '+c,
+      borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'center',
+      gap:10, minWidth:260, animation:'toast-in .2s ease', boxShadow:'0 4px 20px rgba(0,0,0,.4)'
+    }}>
+      <Ico n="check" size={14} color={c}/>
+      <span style={{fontSize:13, color:'#E2E8F0', flex:1}}>{message}</span>
+      <button onClick={onClose} style={{background:'none', border:'none', color:'#475569', display:'flex', padding:2}}>
+        <Ico n="x" size={13}/>
+      </button>
     </div>
   );
 }
 
-/* ─── Pipeline dots ─────────────────────────────────────────── */
-function PipeDots({stage}){
-  const idx=STAGES.indexOf(stage);
-  return(
-    <div style={{display:'flex',alignItems:'center'}}>
-      {STAGES.map((s,i)=>{
-        const done=i<idx,act=i===idx,cfg=SC[s];
-        return(
-          <Fragment key={s}>
-            <div style={{width:8,height:8,borderRadius:'50%',flexShrink:0,
-              background:(act||done)?cfg.color:'#334155',
-              opacity:done?.5:act?1:.3,
-              border:act?'2px solid '+cfg.color:'none'}}/>
-            {i<STAGES.length-1&&<div style={{width:12,height:2,background:done?SC[STAGES[i+1]].color:'#334155',opacity:done?.45:.2}}/>}
-          </Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ─── Modal shell ───────────────────────────────────────────── */
-function Modal({title,onClose,footer,w=500,children}){
-  return(
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.82)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
-      <div style={{background:'#1E293B',borderRadius:14,border:'1px solid #334155',width:w,maxWidth:'94vw',maxHeight:'90vh',overflowY:'auto'}}>
-        <div style={{padding:'16px 20px',borderBottom:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between',position:'sticky',top:0,background:'#1E293B',zIndex:1}}>
-          <h3 style={{margin:0,fontSize:14.5,fontWeight:700,color:'#F1F5F9'}}>{title}</h3>
-          <button onClick={onClose} style={{background:'none',border:'none',color:'#475569',display:'flex',padding:4}}><IX s={16}/></button>
+/* ── Modal ──────────────────────────────────────────────────── */
+function Modal(props) {
+  var title = props.title, onClose = props.onClose, footer = props.footer, w = props.w || 500;
+  return (
+    <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:'16px'}}>
+      <div style={{background:'#1E293B', borderRadius:14, border:'1px solid #334155', width:w, maxWidth:'100%', maxHeight:'90vh', display:'flex', flexDirection:'column'}}>
+        <div style={{padding:'16px 20px', borderBottom:'1px solid #334155', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0}}>
+          <h3 style={{margin:0, fontSize:14.5, fontWeight:700, color:'#F1F5F9'}}>{title}</h3>
+          <button onClick={onClose} style={{background:'none', border:'none', color:'#475569', display:'flex', padding:4}}>
+            <Ico n="x" size={16}/>
+          </button>
         </div>
-        <div style={{padding:'18px 20px'}}>{children}</div>
-        {footer&&<div style={{padding:'13px 20px',borderTop:'1px solid #334155',display:'flex',justifyContent:'flex-end',gap:9,position:'sticky',bottom:0,background:'#1E293B'}}>{footer}</div>}
+        <div style={{padding:'18px 20px', overflowY:'auto', flex:1}}>{props.children}</div>
+        {footer && (
+          <div style={{padding:'13px 20px', borderTop:'1px solid #334155', display:'flex', justifyContent:'flex-end', gap:9, flexShrink:0}}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/* ─── Project Modal ─────────────────────────────────────────── */
-function ProjectModal({project,onSave,onClose}){
-  const[form,setForm]=useState(project||{name:'',description:'',budget:'',color:PC[0]});
-  const[err,setErr]=useState('');
-  const[saving,setSaving]=useState(false);
-  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
-  const submit=async()=>{
-    if(!form.name.trim())return setErr('Project name is required.');
-    if(!form.budget||isNaN(+form.budget)||+form.budget<=0)return setErr('A valid budget is required.');
-    setErr('');setSaving(true);
-    await onSave({...form,budget:+form.budget,id:project&&project.id});
+/* ── Shared input/label styles ──────────────────────────────── */
+var INP = {width:'100%', background:'#0F172A', border:'1px solid #334155', borderRadius:8, padding:'9px 12px', color:'#E2E8F0', fontSize:13.5};
+var LBL = {fontSize:11.5, color:'#64748B', fontWeight:500, marginBottom:5, display:'block'};
+
+/* ═══════════════════════════════════════════════════
+   LOGIN PAGE
+   ═══════════════════════════════════════════════════ */
+function LoginPage(props) {
+  var onLogin = props.onLogin;
+  var _m  = useState('login'),  mode = _m[0],  setMode = _m[1];
+  var _e  = useState(''),       email = _e[0], setEmail = _e[1];
+  var _p  = useState(''),       pass = _p[0],  setPass = _p[1];
+  var _sh = useState(false),    showPass = _sh[0], setShowPass = _sh[1];
+  var _ld = useState(false),    loading = _ld[0],  setLoading = _ld[1];
+  var _er = useState(''),       error = _er[0],    setError = _er[1];
+  var _mg = useState(''),       msg = _mg[0],      setMsg = _mg[1];
+
+  async function handleSubmit() {
+    if (!email.trim() || !pass.trim()) { setError('Please enter your email and password.'); return; }
+    setError(''); setMsg(''); setLoading(true);
+    try {
+      if (mode === 'login') {
+        var res = await db.auth.signInWithPassword({email: email.trim(), password: pass});
+        if (res.error) { setError(res.error.message); }
+        else { onLogin(res.data.user); }
+      } else {
+        var res2 = await db.auth.signUp({email: email.trim(), password: pass});
+        if (res2.error) { setError(res2.error.message); }
+        else { setMsg('Account created! Check your email to confirm, then sign in.'); setMode('login'); }
+      }
+    } catch(e) { setError(e.message || 'Something went wrong.'); }
+    setLoading(false);
+  }
+
+  function handleKey(e) { if (e.key === 'Enter') handleSubmit(); }
+
+  return (
+    <div style={{height:'100vh', background:'#0F172A', display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'}}>
+      {/* Background decoration */}
+      <div style={{position:'absolute', inset:0, overflow:'hidden', pointerEvents:'none'}}>
+        <div style={{position:'absolute', top:'-20%', left:'-10%', width:'40%', height:'60%', background:'radial-gradient(circle, rgba(59,130,246,.08) 0%, transparent 70%)'}}/>
+        <div style={{position:'absolute', bottom:'-10%', right:'-5%', width:'35%', height:'50%', background:'radial-gradient(circle, rgba(167,139,250,.06) 0%, transparent 70%)'}}/>
+      </div>
+
+      <div style={{width:'100%', maxWidth:420, position:'relative'}}>
+        {/* Logo */}
+        <div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:12, marginBottom:32}}>
+          <div style={{width:44, height:44, borderRadius:12, background:'#F59E0B', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 0 24px rgba(245,158,11,.4)'}}>
+            <Ico n="package" size={22} color="#000"/>
+          </div>
+          <div>
+            <div style={{fontSize:22, fontWeight:800, color:'#F1F5F9', letterSpacing:'-0.5px'}}>ProcureFlow</div>
+            <div style={{fontSize:11, color:'#475569', letterSpacing:'1px', textTransform:'uppercase'}}>Enterprise Platform</div>
+          </div>
+        </div>
+
+        {/* Card */}
+        <div style={{background:'#1E293B', borderRadius:16, border:'1px solid #334155', padding:'32px', boxShadow:'0 24px 80px rgba(0,0,0,.5)'}}>
+          <div style={{marginBottom:24}}>
+            <h1 style={{fontSize:20, fontWeight:700, color:'#F1F5F9', marginBottom:6}}>
+              {mode === 'login' ? 'Welcome back' : 'Create account'}
+            </h1>
+            <p style={{fontSize:13, color:'#475569'}}>
+              {mode === 'login' ? 'Sign in to your procurement workspace' : 'Set up your procurement workspace'}
+            </p>
+          </div>
+
+          {/* Email */}
+          <div style={{marginBottom:16}}>
+            <label style={LBL}>Email address</label>
+            <div style={{position:'relative'}}>
+              <div style={{position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', display:'flex'}}>
+                <Ico n="mail" size={14} color="#475569"/>
+              </div>
+              <input
+                type="email"
+                value={email}
+                onChange={function(e){setEmail(e.target.value); setError('');}}
+                onKeyDown={handleKey}
+                placeholder="you@company.com"
+                style={Object.assign({}, INP, {paddingLeft:36})}
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div style={{marginBottom:24}}>
+            <label style={LBL}>Password</label>
+            <div style={{position:'relative'}}>
+              <div style={{position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', display:'flex'}}>
+                <Ico n="lock" size={14} color="#475569"/>
+              </div>
+              <input
+                type={showPass ? 'text' : 'password'}
+                value={pass}
+                onChange={function(e){setPass(e.target.value); setError('');}}
+                onKeyDown={handleKey}
+                placeholder={mode === 'login' ? '••••••••' : 'Minimum 6 characters'}
+                style={Object.assign({}, INP, {paddingLeft:36, paddingRight:40})}
+              />
+              <button
+                onClick={function(){setShowPass(!showPass);}}
+                style={{position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', color:'#475569', display:'flex', padding:4}}
+              >
+                <Ico n={showPass ? 'eyeoff' : 'eye'} size={14}/>
+              </button>
+            </div>
+          </div>
+
+          {/* Error / message */}
+          {error && (
+            <div style={{display:'flex', alignItems:'center', gap:8, padding:'10px 12px', background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.3)', borderRadius:8, fontSize:13, color:'#F87171', marginBottom:16}}>
+              <Ico n="alert" size={14} color="#F87171"/>
+              {error}
+            </div>
+          )}
+          {msg && (
+            <div style={{display:'flex', alignItems:'center', gap:8, padding:'10px 12px', background:'rgba(52,211,153,.1)', border:'1px solid rgba(52,211,153,.3)', borderRadius:8, fontSize:13, color:'#34D399', marginBottom:16}}>
+              <Ico n="check" size={14} color="#34D399"/>
+              {msg}
+            </div>
+          )}
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{
+              width:'100%', padding:'11px', background: loading ? '#92400e' : '#F59E0B',
+              border:'none', borderRadius:10, color:'#000', fontWeight:700, fontSize:14,
+              display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              opacity: loading ? 0.7 : 1, transition:'all .15s', marginBottom:20
+            }}
+          >
+            {loading ? (
+              <div style={{width:16, height:16, border:'2px solid rgba(0,0,0,.3)', borderTop:'2px solid #000', borderRadius:'50%', animation:'spin .7s linear infinite'}}/>
+            ) : (
+              <Ico n="arrr" size={16}/>
+            )}
+            {loading ? 'Please wait…' : (mode === 'login' ? 'Sign In' : 'Create Account')}
+          </button>
+
+          {/* Toggle mode */}
+          <div style={{textAlign:'center', fontSize:13, color:'#475569'}}>
+            {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+            <button
+              onClick={function(){setMode(mode==='login'?'signup':'login'); setError(''); setMsg('');}}
+              style={{background:'none', border:'none', color:'#F59E0B', fontWeight:600, fontSize:13, cursor:'pointer'}}
+            >
+              {mode === 'login' ? 'Create one' : 'Sign in'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{textAlign:'center', marginTop:20, fontSize:11.5, color:'#334155'}}>
+          Secured by Supabase Auth
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Project Modal ──────────────────────────────────────────── */
+function ProjectModal(props) {
+  var project = props.project, onSave = props.onSave, onClose = props.onClose;
+  var _f = useState(project || {name:'', description:'', budget:'', color:PC[0]});
+  var form = _f[0], setForm = _f[1];
+  var _e = useState(''), error = _e[0], setError = _e[1];
+  var _s = useState(false), saving = _s[0], setSaving = _s[1];
+  function set(k,v) { setForm(function(f){ return Object.assign({},f,{[k]:v}); }); }
+
+  async function submit() {
+    if (!form.name.trim()) return setError('Project name is required.');
+    if (!form.budget || isNaN(+form.budget) || +form.budget <= 0) return setError('A valid budget is required.');
+    setError(''); setSaving(true);
+    await onSave(Object.assign({},form,{budget:+form.budget, id:project && project.id}));
     setSaving(false);
-  };
-  return(
-    <Modal title={project?'Edit Project':'Create New Project'} onClose={onClose} w={460}
-      footer={<>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
-        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-          <ISave s={13}/>{saving?'Saving…':project?'Save Changes':'Create Project'}
-        </button>
-      </>}>
-      <div style={{display:'flex',flexDirection:'column',gap:14}}>
-        <div><label style={LBL}>Project Name *</label><input style={INP} value={form.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. IT Infrastructure Upgrade"/></div>
-        <div><label style={LBL}>Description</label><input style={INP} value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Brief description…"/></div>
-        <div><label style={LBL}>Budget (USD) *</label><input style={INP} type="number" min="0" value={form.budget} onChange={e=>set('budget',e.target.value)} placeholder="0"/></div>
+  }
+
+  var footer = (
+    <div style={{display:'flex', gap:9}}>
+      <button onClick={onClose} style={{padding:'8px 18px', background:'transparent', border:'1px solid #334155', borderRadius:8, color:'#94A3B8', fontSize:13}}>Cancel</button>
+      <button onClick={submit} disabled={saving} style={{padding:'8px 20px', background:'#F59E0B', border:'none', borderRadius:8, color:'#000', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6}}>
+        <Ico n="save" size={13}/>{saving ? 'Saving…' : (project ? 'Save Changes' : 'Create Project')}
+      </button>
+    </div>
+  );
+
+  return (
+    <Modal title={project ? 'Edit Project' : 'Create New Project'} onClose={onClose} w={460} footer={footer}>
+      <div style={{display:'flex', flexDirection:'column', gap:14}}>
+        <div><label style={LBL}>Project Name *</label><input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);}} placeholder="e.g. IT Infrastructure Upgrade"/></div>
+        <div><label style={LBL}>Description</label><input style={INP} value={form.description} onChange={function(e){set('description',e.target.value);}} placeholder="Brief description…"/></div>
+        <div><label style={LBL}>Budget (USD) *</label><input style={INP} type="number" min="0" value={form.budget} onChange={function(e){set('budget',e.target.value);}} placeholder="0"/></div>
         <div>
           <label style={LBL}>Project Colour</label>
-          <div style={{display:'flex',gap:9}}>
-            {PC.map(c=><button key={c} onClick={()=>set('color',c)} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>)}
+          <div style={{display:'flex', gap:9}}>
+            {PC.map(function(c){
+              return <button key={c} onClick={function(){set('color',c);}} style={{width:28, height:28, borderRadius:'50%', background:c, border:form.color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>;
+            })}
           </div>
         </div>
-        {err&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:7,fontSize:12.5,color:'#F87171'}}><IWarn s={13}/>{err}</div>}
-      </div>
-    </Modal>
-  );
-}
-
-/* ─── Item Modal ────────────────────────────────────────────── */
-function ItemModal({item,projectId,categories,currency,defStage,onSave,onClose}){
-  const[form,setForm]=useState(item||{name:'',category:categories[0]||'Hardware',vendor:'',status:defStage||'Creation',cost:'',deadline:''});
-  const[err,setErr]=useState('');
-  const[saving,setSaving]=useState(false);
-  const set=(k,v)=>setForm(f=>({...f,[k]:v}));
-  const submit=async()=>{
-    if(!form.name.trim())return setErr('Item name is required.');
-    if(!form.vendor.trim())return setErr('Vendor is required.');
-    if(!form.cost||isNaN(+form.cost)||+form.cost<=0)return setErr('Valid cost is required.');
-    if(!form.deadline)return setErr('Deadline is required.');
-    setErr('');setSaving(true);
-    await onSave({...form,cost:+form.cost,id:item&&item.id,projectId:item?item.projectId:projectId});
-    setSaving(false);
-  };
-  return(
-    <Modal title={item?'Edit Equipment':'Add Equipment'} onClose={onClose}
-      footer={<>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
-        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-          <ISave s={13}/>{saving?'Saving…':item?'Save Changes':'Add Equipment'}
-        </button>
-      </>}>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Equipment / Item Name *</label><input style={INP} value={form.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Dell XPS Workstations (x10)"/></div>
-        <div><label style={LBL}>Category</label><select style={{...INP,cursor:'pointer'}} value={form.category} onChange={e=>set('category',e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
-        <div><label style={LBL}>Pipeline Stage</label><select style={{...INP,cursor:'pointer'}} value={form.status} onChange={e=>set('status',e.target.value)}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></div>
-        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Vendor *</label><input style={INP} value={form.vendor} onChange={e=>set('vendor',e.target.value)} placeholder="e.g. Dell Technologies"/></div>
-        <div><label style={LBL}>Cost ({currency}) *</label><input style={INP} type="number" min="0" value={form.cost} onChange={e=>set('cost',e.target.value)} placeholder="0"/></div>
-        <div><label style={LBL}>Deadline *</label><input style={{...INP,colorScheme:'dark'}} type="date" value={form.deadline} onChange={e=>set('deadline',e.target.value)}/></div>
-        {err&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:7,fontSize:12.5,color:'#F87171'}}><IWarn s={13}/>{err}</div>}
-      </div>
-    </Modal>
-  );
-}
-
-/* ─── Dashboard ─────────────────────────────────────────────── */
-function Dashboard({projects,items,currency}){
-  const tBudget=projects.reduce((s,p)=>s+p.budget,0);
-  const tSpend=items.reduce((s,i)=>s+i.cost,0);
-  const deliv=items.filter(i=>i.status==='Delivered').length;
-  const pct=tBudget?Math.min(100,Math.round((tSpend/tBudget)*100)):0;
-  const barCol=pct>85?'#EF4444':pct>65?'#F59E0B':'#34D399';
-
-  const chartData=useMemo(()=>projects.map(p=>({
-    name:p.name.split(' ').slice(0,2).join(' '),
-    spend:items.filter(i=>i.projectId===p.id).reduce((s,i)=>s+i.cost,0),
-    color:p.color
-  })),[projects,items]);
-
-  const stageRows=STAGES.map(s=>({name:s,count:items.filter(i=>i.status===s).length}));
-
-  return(
-    <div style={{display:'flex',flexDirection:'column',gap:18}}>
-      {/* Stat cards */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
-        {[
-          [IDollar,'Total Budget',   fmt(tBudget,currency),`${projects.length} projects`,                                          '#F59E0B'],
-          [ITrend, 'Total Spend',    fmt(tSpend,currency), `${pct}% utilized`,                                                    '#3B82F6'],
-          [IBox,   'Total Items',    items.length,          `${deliv} delivered`,                                                   '#A78BFA'],
-          [IOk,    'Completion',     (items.length?Math.round((deliv/items.length)*100):0)+'%',`${deliv} of ${items.length} items`,'#34D399'],
-        ].map(([Icon,label,value,sub,color])=>(
-          <div key={label} style={{background:'#1E293B',borderRadius:12,border:'1px solid #1E3A5F',padding:'18px 20px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <span style={{fontSize:10.5,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px'}}>{label}</span>
-              <div style={{width:28,height:28,borderRadius:7,background:color+'18',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <Icon s={13} c={{color}}/>
-              </div>
-            </div>
-            <div style={{fontSize:24,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{value}</div>
-            <div style={{fontSize:11,color:'#475569',marginTop:5}}>{sub}</div>
+        {error && (
+          <div style={{display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.25)', borderRadius:7, fontSize:12.5, color:'#F87171'}}>
+            <Ico n="alert" size={13}/>{error}
           </div>
-        ))}
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Item Modal ─────────────────────────────────────────────── */
+function ItemModal(props) {
+  var item = props.item, projectId = props.projectId, categories = props.categories;
+  var currency = props.currency, defStage = props.defStage;
+  var onSave = props.onSave, onClose = props.onClose;
+  var initForm = item || {name:'', category:categories[0]||'Hardware', vendor:'', status:defStage||'Creation', cost:'', deadline:''};
+  var _f = useState(initForm), form = _f[0], setForm = _f[1];
+  var _e = useState(''), error = _e[0], setError = _e[1];
+  var _s = useState(false), saving = _s[0], setSaving = _s[1];
+  function set(k,v) { setForm(function(f){ return Object.assign({},f,{[k]:v}); }); }
+
+  async function submit() {
+    if (!form.name.trim()) return setError('Item name is required.');
+    if (!form.vendor.trim()) return setError('Vendor is required.');
+    if (!form.cost || isNaN(+form.cost) || +form.cost <= 0) return setError('Valid cost is required.');
+    if (!form.deadline) return setError('Deadline is required.');
+    setError(''); setSaving(true);
+    await onSave(Object.assign({},form,{cost:+form.cost, id:item&&item.id, projectId:item?item.projectId:projectId}));
+    setSaving(false);
+  }
+
+  var footer = (
+    <div style={{display:'flex', gap:9}}>
+      <button onClick={onClose} style={{padding:'8px 18px', background:'transparent', border:'1px solid #334155', borderRadius:8, color:'#94A3B8', fontSize:13}}>Cancel</button>
+      <button onClick={submit} disabled={saving} style={{padding:'8px 20px', background:'#F59E0B', border:'none', borderRadius:8, color:'#000', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6}}>
+        <Ico n="save" size={13}/>{saving ? 'Saving…' : (item ? 'Save Changes' : 'Add Equipment')}
+      </button>
+    </div>
+  );
+
+  return (
+    <Modal title={item ? 'Edit Equipment' : 'Add Equipment'} onClose={onClose} footer={footer}>
+      <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:14}}>
+        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Equipment / Item Name *</label><input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);}} placeholder="e.g. Dell XPS Workstations (x10)"/></div>
+        <div>
+          <label style={LBL}>Category</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.category} onChange={function(e){set('category',e.target.value);}}>
+            {categories.map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+          </select>
+        </div>
+        <div>
+          <label style={LBL}>Pipeline Stage</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.status} onChange={function(e){set('status',e.target.value);}}>
+            {STAGES.map(function(s){ return <option key={s} value={s}>{s}</option>; })}
+          </select>
+        </div>
+        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Vendor *</label><input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value);}} placeholder="e.g. Dell Technologies"/></div>
+        <div><label style={LBL}>Cost ({currency || 'USD'}) *</label><input style={INP} type="number" min="0" value={form.cost} onChange={function(e){set('cost',e.target.value);}} placeholder="0"/></div>
+        <div><label style={LBL}>Deadline *</label><input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.deadline} onChange={function(e){set('deadline',e.target.value);}}/></div>
+        {error && (
+          <div style={{gridColumn:'1/-1', display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.25)', borderRadius:7, fontSize:12.5, color:'#F87171'}}>
+            <Ico n="alert" size={13}/>{error}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Dashboard ──────────────────────────────────────────────── */
+function Dashboard(props) {
+  var projects = props.projects, items = props.items, currency = props.currency;
+  var tBudget = projects.reduce(function(s,p){return s+p.budget;},0);
+  var tSpend  = items.reduce(function(s,i){return s+i.cost;},0);
+  var deliv   = items.filter(function(i){return i.status==='Delivered';}).length;
+  var pct = tBudget ? Math.min(100, Math.round((tSpend/tBudget)*100)) : 0;
+  var barCol = pct > 85 ? '#EF4444' : pct > 65 ? '#F59E0B' : '#34D399';
+
+  var chartData = useMemo(function(){
+    return projects.map(function(p){
+      return {
+        name: p.name.split(' ').slice(0,2).join(' '),
+        spend: items.filter(function(i){return i.projectId===p.id;}).reduce(function(s,i){return s+i.cost;},0),
+        color: p.color
+      };
+    });
+  }, [projects, items]);
+
+  var stageRows = STAGES.map(function(s){
+    return {name:s, count:items.filter(function(i){return i.status===s;}).length};
+  });
+
+  var statCards = [
+    {icon:'dollar',  label:'Total Budget', value:fmt(tBudget,currency), sub:projects.length+' projects',              color:'#F59E0B'},
+    {icon:'trend',   label:'Total Spend',  value:fmt(tSpend,currency),  sub:pct+'% utilized',                        color:'#3B82F6'},
+    {icon:'package', label:'Total Items',  value:items.length,           sub:deliv+' delivered',                      color:'#A78BFA'},
+    {icon:'check',   label:'Completion',   value:(items.length?Math.round((deliv/items.length)*100):0)+'%', sub:deliv+' of '+items.length+' items', color:'#34D399'},
+  ];
+
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:18}}>
+
+      {/* Stat cards */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12}}>
+        {statCards.map(function(card){
+          return (
+            <div key={card.label} style={{background:'#1E293B', borderRadius:12, border:'1px solid #1E3A5F', padding:'18px 20px'}}>
+              <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+                <span style={{fontSize:10.5, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'.6px'}}>{card.label}</span>
+                <div style={{width:28, height:28, borderRadius:7, background:card.color+'18', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                  <Ico n={card.icon} size={13} color={card.color}/>
+                </div>
+              </div>
+              <div style={{fontSize:24, fontWeight:700, color:'#F1F5F9', lineHeight:1}}>{card.value}</div>
+              <div style={{fontSize:11, color:'#475569', marginTop:5}}>{card.sub}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Budget bar */}
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'16px 22px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:10}}>
+      <div style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'16px 22px'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginBottom:10}}>
           <div>
-            <div style={{fontSize:11,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:4}}>Budget Utilization</div>
-            <div style={{fontSize:13.5,color:'#94A3B8'}}>{fmt(tSpend,currency)} <span style={{color:'#475569'}}>of {fmt(tBudget,currency)}</span></div>
+            <div style={{fontSize:11, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'.6px', marginBottom:4}}>Budget Utilization</div>
+            <div style={{fontSize:13.5, color:'#94A3B8'}}>{fmt(tSpend,currency)} <span style={{color:'#475569'}}>of {fmt(tBudget,currency)}</span></div>
           </div>
-          <span style={{fontSize:24,fontWeight:700,color:barCol}}>{pct}%</span>
+          <span style={{fontSize:24, fontWeight:700, color:barCol}}>{pct}%</span>
         </div>
-        <div style={{height:8,background:'#0F172A',borderRadius:999,overflow:'hidden'}}>
-          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:'linear-gradient(90deg,'+barCol+'cc,'+barCol+')',transition:'width .5s'}}/>
+        <div style={{height:8, background:'#0F172A', borderRadius:999, overflow:'hidden'}}>
+          <div style={{height:'100%', borderRadius:999, width:pct+'%', background:'linear-gradient(90deg,'+barCol+'cc,'+barCol+')', transition:'width .5s'}}/>
         </div>
       </div>
 
       {/* Charts row */}
-      <div style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:14}}>
-        <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'18px 20px'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#E2E8F0',marginBottom:14}}>Spend by Project</div>
-          <BarChart data={chartData} h={200} currency={currency}/>
+      <div style={{display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:14}}>
+        <div style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'18px 20px'}}>
+          <div style={{fontSize:13, fontWeight:600, color:'#E2E8F0', marginBottom:14}}>Spend by Project</div>
+          <BarChart data={chartData} height={200} currency={currency}/>
         </div>
-        <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'18px 20px',display:'flex',flexDirection:'column'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#E2E8F0',marginBottom:14}}>Pipeline Overview</div>
-          <div style={{display:'flex',flexDirection:'column',gap:12,flex:1}}>
-            {stageRows.map(({name,count})=>{
-              const cfg=SC[name],p=items.length?Math.round((count/items.length)*100):0;
-              return(
-                <div key={name}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                    <span style={{fontSize:12,color:cfg.color}}>{name}</span>
-                    <span style={{fontSize:12,color:'#475569'}}>{count} items ({p}%)</span>
+        <div style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'18px 20px', display:'flex', flexDirection:'column'}}>
+          <div style={{fontSize:13, fontWeight:600, color:'#E2E8F0', marginBottom:14}}>Pipeline Overview</div>
+          <div style={{display:'flex', flexDirection:'column', gap:12, flex:1}}>
+            {stageRows.map(function(row){
+              var cfg = SC[row.name];
+              var p = items.length ? Math.round((row.count/items.length)*100) : 0;
+              return (
+                <div key={row.name}>
+                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:4}}>
+                    <span style={{fontSize:12, color:cfg.color}}>{row.name}</span>
+                    <span style={{fontSize:12, color:'#475569'}}>{row.count} items ({p}%)</span>
                   </div>
-                  <div style={{height:5,background:'#0F172A',borderRadius:999}}>
-                    <div style={{height:'100%',borderRadius:999,width:p+'%',background:cfg.color,opacity:.7}}/>
+                  <div style={{height:5, background:'#0F172A', borderRadius:999}}>
+                    <div style={{height:'100%', borderRadius:999, width:p+'%', background:cfg.color, opacity:.7}}/>
                   </div>
                 </div>
               );
             })}
           </div>
-          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid #334155'}}>
-            <div style={{fontSize:10.5,color:'#475569',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Overall Delivery Rate</div>
-            <div style={{fontSize:22,fontWeight:700,color:'#34D399'}}>{items.length?Math.round((deliv/items.length)*100):0}%</div>
+          <div style={{marginTop:16, paddingTop:14, borderTop:'1px solid #334155'}}>
+            <div style={{fontSize:10.5, color:'#475569', textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4}}>Overall Delivery Rate</div>
+            <div style={{fontSize:22, fontWeight:700, color:'#34D399'}}>{items.length ? Math.round((deliv/items.length)*100) : 0}%</div>
           </div>
         </div>
       </div>
 
       {/* Project summary */}
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'18px 20px'}}>
-        <div style={{fontSize:13,fontWeight:600,color:'#E2E8F0',marginBottom:14}}>Project Summary</div>
-        {projects.length===0&&<div style={{fontSize:13,color:'#475569',textAlign:'center',padding:'20px 0'}}>No projects yet.</div>}
-        {projects.map((p,idx)=>{
-          const pi=items.filter(i=>i.projectId===p.id);
-          const ps=pi.reduce((s,i)=>s+i.cost,0);
-          const pp=p.budget?Math.min(100,Math.round((ps/p.budget)*100)):0;
-          const pd=pi.filter(i=>i.status==='Delivered').length;
-          return(
-            <div key={p.id} style={{display:'flex',alignItems:'center',gap:14,padding:'10px 0',borderBottom:idx<projects.length-1?'1px solid #1E3A5F':'none'}}>
-              <div style={{width:9,height:9,borderRadius:'50%',background:p.color,flexShrink:0}}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:13,color:'#E2E8F0',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:5}}>{p.name}</div>
-                <div style={{height:3,background:'#0F172A',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pp+'%',background:p.color}}/></div>
+      <div style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'18px 20px'}}>
+        <div style={{fontSize:13, fontWeight:600, color:'#E2E8F0', marginBottom:14}}>Project Summary</div>
+        {!projects.length && <div style={{fontSize:13, color:'#475569', textAlign:'center', padding:'20px 0'}}>No projects yet — create one in the Projects tab.</div>}
+        {projects.map(function(p, idx){
+          var pi = items.filter(function(i){return i.projectId===p.id;});
+          var ps = pi.reduce(function(s,i){return s+i.cost;},0);
+          var pp = p.budget ? Math.min(100,Math.round((ps/p.budget)*100)) : 0;
+          var pd = pi.filter(function(i){return i.status==='Delivered';}).length;
+          return (
+            <div key={p.id} style={{display:'flex', alignItems:'center', gap:14, padding:'10px 0', borderBottom:idx<projects.length-1?'1px solid #1E3A5F':'none'}}>
+              <div style={{width:9, height:9, borderRadius:'50%', background:p.color, flexShrink:0}}/>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:13, color:'#E2E8F0', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:5}}>{p.name}</div>
+                <div style={{height:3, background:'#0F172A', borderRadius:999}}>
+                  <div style={{height:'100%', borderRadius:999, width:pp+'%', background:p.color}}/>
+                </div>
               </div>
-              <div style={{textAlign:'right',flexShrink:0}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:'#E2E8F0'}}>{fmt(ps,currency)}</div>
-                <div style={{fontSize:11,color:'#475569'}}>{pd}/{pi.length} delivered</div>
+              <div style={{textAlign:'right', flexShrink:0}}>
+                <div style={{fontSize:12.5, fontWeight:600, color:'#E2E8F0'}}>{fmt(ps,currency)}</div>
+                <div style={{fontSize:11, color:'#475569'}}>{pd}/{pi.length} delivered</div>
               </div>
             </div>
           );
@@ -384,178 +653,75 @@ function Dashboard({projects,items,currency}){
   );
 }
 
-/* ─── Projects List ─────────────────────────────────────────── */
-function ProjectsList({projects,items,currency,onSelect,onEdit,onDelete}){
-  const stats=useMemo(()=>projects.map(p=>{
-    const pi=items.filter(i=>i.projectId===p.id);
-    const spend=pi.reduce((s,i)=>s+i.cost,0);
-    return{...p,spend,pct:Math.min(100,Math.round((spend/p.budget)*100)),
-      sc:STAGES.reduce((a,s)=>({...a,[s]:pi.filter(i=>i.status===s).length}),{})};
-  }),[projects,items]);
+/* ── Projects List ──────────────────────────────────────────── */
+function ProjectsList(props) {
+  var projects = props.projects, items = props.items, currency = props.currency;
+  var onSelect = props.onSelect, onEdit = props.onEdit, onDelete = props.onDelete;
 
-  return(
-    <div style={{display:'flex',flexDirection:'column',gap:18}}>
-      <div style={{fontSize:12,color:'#475569'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
-      {projects.length===0&&<div style={{background:'#1E293B',border:'1px dashed #334155',borderRadius:14,padding:'50px 20px',textAlign:'center',color:'#475569',fontSize:13}}>No projects yet. Click <strong style={{color:'#F59E0B'}}>New Project</strong> to get started.</div>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}}>
-        {stats.map(p=>(
-          <div key={p.id} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:14,overflow:'hidden',transition:'border-color .15s'}}
-            onMouseEnter={e=>e.currentTarget.style.borderColor=p.color+'55'}
-            onMouseLeave={e=>e.currentTarget.style.borderColor='#1E3A5F'}>
-            <div style={{height:3,background:p.color}}/>
-            <div style={{padding:'16px 16px 14px'}}>
-              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:10}}>
-                <div style={{flex:1,minWidth:0,marginRight:10}}>
-                  <div style={{fontSize:14,fontWeight:700,color:'#F1F5F9',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
-                  <div style={{fontSize:11.5,color:'#475569',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.description||'No description'}</div>
-                </div>
-                <div style={{display:'flex',gap:5,flexShrink:0}}>
-                  <button onClick={e=>{e.stopPropagation();onEdit(p);}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:6,padding:'4px 7px',color:'#60A5FA',display:'flex'}}><IPen s={11}/></button>
-                  <button onClick={e=>{e.stopPropagation();onDelete(p.id);}} style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:6,padding:'4px 7px',color:'#F87171',display:'flex'}}><ITrash s={11}/></button>
-                </div>
-              </div>
-              <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-                  <span style={{fontSize:11,color:'#475569'}}>Budget</span>
-                  <span style={{fontSize:11,color:'#94A3B8'}}>{fmt(p.spend,currency)} / {fmt(p.budget,currency)}</span>
-                </div>
-                <div style={{height:5,background:'#0F172A',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
-              </div>
-              <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
-                {STAGES.map(s=>{
-                  const cnt=p.sc[s]||0,cfg=SC[s];
-                  return(
-                    <div key={s} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:999,background:cfg.bg,border:'1px solid '+cfg.color+'25'}}>
-                      <span style={{fontSize:9.5,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.4px'}}>{s}</span>
-                      <span style={{fontSize:11.5,fontWeight:700,color:cfg.color}}>{cnt}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <button onClick={()=>onSelect(p.id)} style={{width:'100%',padding:'9px',background:p.color+'14',border:'1px solid '+p.color+'28',borderRadius:8,color:p.color,fontSize:12.5,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                View Equipment <IChR s={13}/>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+  var stats = useMemo(function(){
+    return projects.map(function(p){
+      var pi = items.filter(function(i){return i.projectId===p.id;});
+      var spend = pi.reduce(function(s,i){return s+i.cost;},0);
+      var sc = {};
+      STAGES.forEach(function(s){ sc[s] = pi.filter(function(i){return i.status===s;}).length; });
+      return Object.assign({},p,{spend:spend, pct:Math.min(100,Math.round((spend/p.budget)*100)), sc:sc});
+    });
+  }, [projects, items]);
 
-/* ─── Project Kanban ────────────────────────────────────────── */
-function Kanban({project,items,categories,currency,onBack,onAdd,onEdit,onDelete,onMove}){
-  const[search,setSearch]=useState('');
-  const pi=useMemo(()=>items.filter(i=>i.projectId===project.id&&(!search||i.name.toLowerCase().includes(search.toLowerCase())||i.vendor.toLowerCase().includes(search.toLowerCase()))),[items,project.id,search]);
-  const all=items.filter(i=>i.projectId===project.id);
-  const spend=all.reduce((s,i)=>s+i.cost,0);
-  const pct=Math.min(100,Math.round((spend/project.budget)*100));
-  const deliv=all.filter(i=>i.status==='Delivered').length;
-
-  return(
-    <div style={{display:'flex',flexDirection:'column',gap:14}}>
-      {/* Breadcrumb */}
-      <div>
-        <button onClick={onBack} style={{background:'none',border:'none',color:'#475569',fontSize:12.5,display:'flex',alignItems:'center',gap:5,padding:'0 0 10px',cursor:'pointer'}}>
-          <IChL s={13}/> All Projects
-        </button>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <div style={{width:10,height:10,borderRadius:'50%',background:project.color}}/>
-            <div>
-              <h2 style={{margin:0,fontSize:17,fontWeight:700,color:'#F1F5F9'}}>{project.name}</h2>
-              <div style={{fontSize:12,color:'#475569'}}>{project.description}</div>
-            </div>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{position:'relative'}}>
-              <ISearch s={13} c={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',color:'#475569'}}/>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search equipment…"
-                style={{paddingLeft:28,paddingRight:10,paddingTop:7,paddingBottom:7,background:'#1E293B',border:'1px solid #334155',borderRadius:7,color:'#E2E8F0',fontSize:12.5,width:180}}/>
-            </div>
-            <button onClick={()=>onAdd('Creation')} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 14px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:5}}>
-              <IPlus s={13}/> Add Equipment
-            </button>
-          </div>
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:18}}>
+      <div style={{fontSize:12, color:'#475569'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
+      {!projects.length && (
+        <div style={{background:'#1E293B', border:'1px dashed #334155', borderRadius:14, padding:'50px 20px', textAlign:'center', color:'#475569', fontSize:13}}>
+          No projects yet. Click <strong style={{color:'#F59E0B'}}>New Project</strong> to get started.
         </div>
-      </div>
-
-      {/* Mini stats */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-        {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(spend,currency),pct+'% used'],['Items',all.length,'Total'],['Delivered',(all.length?Math.round((deliv/all.length)*100):0)+'%',deliv+' of '+all.length]].map(([l,v,s])=>(
-          <div key={l} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'12px 14px'}}>
-            <div style={{fontSize:10,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{l}</div>
-            <div style={{fontSize:20,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{v}</div>
-            <div style={{fontSize:11,color:'#475569',marginTop:3}}>{s}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Budget bar */}
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'11px 16px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-          <span style={{fontSize:11,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span>
-          <span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span>
-        </div>
-        <div style={{height:6,background:'#0F172A',borderRadius:999}}>
-          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/>
-        </div>
-      </div>
-
-      {/* Kanban columns */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-        {STAGES.map((stage,si)=>{
-          const col=pi.filter(i=>i.status===stage),cfg=SC[stage];
-          return(
-            <div key={stage} style={{background:'#0A1422',border:'1px solid #1E293B',borderRadius:12,display:'flex',flexDirection:'column',minHeight:280}}>
-              {/* Column header */}
-              <div style={{padding:'11px 12px 9px',borderBottom:'2px solid '+cfg.color+'35',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-                <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <span style={{width:7,height:7,borderRadius:'50%',background:cfg.color}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.6px'}}>{stage}</span>
+      )}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))', gap:14}}>
+        {stats.map(function(p){
+          return (
+            <div key={p.id}
+              style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:14, overflow:'hidden', transition:'border-color .15s'}}
+              onMouseEnter={function(e){e.currentTarget.style.borderColor=p.color+'55';}}
+              onMouseLeave={function(e){e.currentTarget.style.borderColor='#1E3A5F';}}
+            >
+              <div style={{height:3, background:p.color}}/>
+              <div style={{padding:'16px 16px 14px'}}>
+                <div style={{display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10}}>
+                  <div style={{flex:1, minWidth:0, marginRight:10}}>
+                    <div style={{fontSize:14, fontWeight:700, color:'#F1F5F9', marginBottom:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{p.name}</div>
+                    <div style={{fontSize:11.5, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{p.description||'No description'}</div>
+                  </div>
+                  <div style={{display:'flex', gap:5, flexShrink:0}}>
+                    <button onClick={function(e){e.stopPropagation();onEdit(p);}} style={{background:'rgba(96,165,250,.1)', border:'1px solid rgba(96,165,250,.2)', borderRadius:6, padding:'4px 7px', color:'#60A5FA', display:'flex'}}>
+                      <Ico n="edit" size={11}/>
+                    </button>
+                    <button onClick={function(e){e.stopPropagation();onDelete(p.id);}} style={{background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.2)', borderRadius:6, padding:'4px 7px', color:'#F87171', display:'flex'}}>
+                      <Ico n="trash" size={11}/>
+                    </button>
+                  </div>
                 </div>
-                <span style={{fontSize:11,fontWeight:700,color:cfg.color,background:cfg.bg,padding:'1px 7px',borderRadius:999}}>{col.length}</span>
-              </div>
-
-              {/* Cards */}
-              <div style={{flex:1,overflowY:'auto',padding:8}}>
-                {col.length===0
-                  ?<div style={{textAlign:'center',padding:'22px 8px',color:'#334155',fontSize:12,border:'1px dashed #1E3A5F',borderRadius:8,marginTop:4}}>No items</div>
-                  :col.map(item=>(
-                    <div key={item.id} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'11px 11px 9px',marginBottom:8}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:'#E2E8F0',marginBottom:3,lineHeight:1.35}}>{item.name}</div>
-                      <div style={{fontSize:11,color:'#475569',marginBottom:8}}>{item.vendor}</div>
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                        <span style={{fontSize:10.5,color:'#64748B',background:'#0F172A',padding:'2px 7px',borderRadius:5}}>{item.category}</span>
-                        <span style={{fontSize:12.5,fontWeight:700,color:'#E2E8F0'}}>{fmt(item.cost,currency)}</span>
+                <div style={{marginBottom:12}}>
+                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:5}}>
+                    <span style={{fontSize:11, color:'#475569'}}>Budget</span>
+                    <span style={{fontSize:11, color:'#94A3B8'}}>{fmt(p.spend,currency)} / {fmt(p.budget,currency)}</span>
+                  </div>
+                  <div style={{height:5, background:'#0F172A', borderRadius:999}}>
+                    <div style={{height:'100%', borderRadius:999, width:p.pct+'%', background:p.pct>85?'#EF4444':p.color}}/>
+                  </div>
+                </div>
+                <div style={{display:'flex', gap:5, marginBottom:14, flexWrap:'wrap'}}>
+                  {STAGES.map(function(s){
+                    var cnt = p.sc[s]||0, cfg = SC[s];
+                    return (
+                      <div key={s} style={{display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:999, background:cfg.bg, border:'1px solid '+cfg.color+'25'}}>
+                        <span style={{fontSize:9.5, fontWeight:700, color:cfg.color, textTransform:'uppercase', letterSpacing:'.4px'}}>{s}</span>
+                        <span style={{fontSize:11.5, fontWeight:700, color:cfg.color}}>{cnt}</span>
                       </div>
-                      {/* Stage buttons */}
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                        <div style={{display:'flex',gap:4}}>
-                          {si>0&&<button onClick={()=>onMove(item.id,STAGES[si-1])} style={{background:'rgba(148,163,184,.08)',border:'1px solid #334155',borderRadius:5,padding:'3px 7px',color:'#64748B',display:'flex',alignItems:'center',gap:3,fontSize:10.5,cursor:'pointer'}}><IArrL s={10}/>{STAGES[si-1]}</button>}
-                          {si<STAGES.length-1&&<button onClick={()=>onMove(item.id,STAGES[si+1])} style={{background:cfg.bg,border:'1px solid '+cfg.color+'28',borderRadius:5,padding:'3px 7px',color:cfg.color,display:'flex',alignItems:'center',gap:3,fontSize:10.5,cursor:'pointer'}}>{STAGES[si+1]}<IArrR s={10}/></button>}
-                        </div>
-                        <div style={{display:'flex',gap:4}}>
-                          <button onClick={()=>onEdit(item)} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'3px 6px',color:'#60A5FA',display:'flex',cursor:'pointer'}}><IPen s={10}/></button>
-                          <button onClick={()=>onDelete(item.id)} style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'3px 6px',color:'#F87171',display:'flex',cursor:'pointer'}}><ITrash s={10}/></button>
-                        </div>
-                      </div>
-                      <div style={{paddingTop:8,borderTop:'1px solid #1E3A5F',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <PipeDots stage={item.status}/>
-                        <span style={{fontSize:10,color:'#475569'}}>{item.deadline}</span>
-                      </div>
-                    </div>
-                  ))
-                }
-              </div>
-
-              {/* Add shortcut */}
-              <div style={{padding:8,borderTop:'1px solid #1E293B',flexShrink:0}}>
-                <button onClick={()=>onAdd(stage)}
-                  style={{width:'100%',padding:'6px',background:'transparent',border:'1px dashed #1E3A5F',borderRadius:7,color:'#334155',fontSize:11.5,display:'flex',alignItems:'center',justifyContent:'center',gap:4,cursor:'pointer',transition:'all .15s'}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=cfg.color+'60';e.currentTarget.style.color=cfg.color;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor='#1E3A5F';e.currentTarget.style.color='#334155';}}>
-                  <IPlus s={11}/> Add here
+                    );
+                  })}
+                </div>
+                <button onClick={function(){onSelect(p.id);}} style={{width:'100%', padding:'9px', background:p.color+'14', border:'1px solid '+p.color+'28', borderRadius:8, color:p.color, fontSize:12.5, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6}}>
+                  View Equipment <Ico n="chevr" size={13}/>
                 </button>
               </div>
             </div>
@@ -566,44 +732,222 @@ function Kanban({project,items,categories,currency,onBack,onAdd,onEdit,onDelete,
   );
 }
 
-/* ─── Settings ──────────────────────────────────────────────── */
-function SettingsView({currency,setCurrency,categories,onAddCat,onRemoveCat,onToast}){
-  const[newCat,setNewCat]=useState('');
-  const card={background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'20px 22px',marginBottom:16};
-  const addCat=async()=>{
-    const c=newCat.trim();
-    if(!c||categories.includes(c))return;
-    await onAddCat(c);setNewCat('');onToast('Category "'+c+'" added');
-  };
-  return(
+/* ── Kanban Board ───────────────────────────────────────────── */
+function Kanban(props) {
+  var project = props.project, items = props.items, categories = props.categories;
+  var currency = props.currency;
+  var onBack = props.onBack, onAdd = props.onAdd, onEdit = props.onEdit;
+  var onDelete = props.onDelete, onMove = props.onMove;
+
+  var _s = useState(''), search = _s[0], setSearch = _s[1];
+
+  var pi = useMemo(function(){
+    var q = search.toLowerCase();
+    return items.filter(function(i){
+      return i.projectId===project.id && (!q || i.name.toLowerCase().includes(q) || i.vendor.toLowerCase().includes(q));
+    });
+  }, [items, project.id, search]);
+
+  var allPi  = items.filter(function(i){return i.projectId===project.id;});
+  var spend  = allPi.reduce(function(s,i){return s+i.cost;},0);
+  var pct    = Math.min(100, Math.round((spend/project.budget)*100));
+  var deliv  = allPi.filter(function(i){return i.status==='Delivered';}).length;
+
+  var miniStats = [
+    ['Budget', fmt(project.budget,currency), 'Allocated'],
+    ['Spend',  fmt(spend,currency),          pct+'% used'],
+    ['Items',  allPi.length,                 'Total'],
+    ['Delivered', (allPi.length?Math.round((deliv/allPi.length)*100):0)+'%', deliv+' of '+allPi.length],
+  ];
+
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:14}}>
+      {/* Breadcrumb */}
+      <div>
+        <button onClick={onBack} style={{background:'none', border:'none', color:'#475569', fontSize:12.5, display:'flex', alignItems:'center', gap:5, padding:'0 0 10px', cursor:'pointer'}}>
+          <Ico n="chevl" size={13}/> All Projects
+        </button>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10}}>
+          <div style={{display:'flex', alignItems:'center', gap:10}}>
+            <div style={{width:10, height:10, borderRadius:'50%', background:project.color}}/>
+            <div>
+              <h2 style={{margin:0, fontSize:17, fontWeight:700, color:'#F1F5F9'}}>{project.name}</h2>
+              <div style={{fontSize:12, color:'#475569'}}>{project.description}</div>
+            </div>
+          </div>
+          <div style={{display:'flex', alignItems:'center', gap:8}}>
+            <div style={{position:'relative'}}>
+              <div style={{position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', pointerEvents:'none', display:'flex'}}>
+                <Ico n="search" size={13} color="#475569"/>
+              </div>
+              <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search equipment…"
+                style={{paddingLeft:28, paddingRight:10, paddingTop:7, paddingBottom:7, background:'#1E293B', border:'1px solid #334155', borderRadius:7, color:'#E2E8F0', fontSize:12.5, width:180}}/>
+            </div>
+            <button onClick={function(){onAdd('Creation');}} style={{background:'#F59E0B', border:'none', borderRadius:8, padding:'8px 14px', color:'#000', fontWeight:700, fontSize:12.5, display:'flex', alignItems:'center', gap:5}}>
+              <Ico n="plus" size={13}/> Add Equipment
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mini stats */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10}}>
+        {miniStats.map(function(row){
+          return (
+            <div key={row[0]} style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:10, padding:'12px 14px'}}>
+              <div style={{fontSize:10, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:4}}>{row[0]}</div>
+              <div style={{fontSize:20, fontWeight:700, color:'#F1F5F9', lineHeight:1}}>{row[1]}</div>
+              <div style={{fontSize:11, color:'#475569', marginTop:3}}>{row[2]}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Budget bar */}
+      <div style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:10, padding:'11px 16px'}}>
+        <div style={{display:'flex', justifyContent:'space-between', marginBottom:5}}>
+          <span style={{fontSize:11, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'.5px'}}>Budget Utilization</span>
+          <span style={{fontSize:12, fontWeight:600, color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span>
+        </div>
+        <div style={{height:6, background:'#0F172A', borderRadius:999}}>
+          <div style={{height:'100%', borderRadius:999, width:pct+'%', background:pct>85?'#EF4444':project.color}}/>
+        </div>
+      </div>
+
+      {/* Kanban columns */}
+      <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10}}>
+        {STAGES.map(function(stage, si){
+          var col = pi.filter(function(i){return i.status===stage;});
+          var cfg = SC[stage];
+          return (
+            <div key={stage} style={{background:'#0A1422', border:'1px solid #1E293B', borderRadius:12, display:'flex', flexDirection:'column', minHeight:280}}>
+              {/* Column header */}
+              <div style={{padding:'11px 12px 9px', borderBottom:'2px solid '+cfg.color+'35', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0}}>
+                <div style={{display:'flex', alignItems:'center', gap:6}}>
+                  <span style={{width:7, height:7, borderRadius:'50%', background:cfg.color}}/>
+                  <span style={{fontSize:11, fontWeight:700, color:cfg.color, textTransform:'uppercase', letterSpacing:'.6px'}}>{stage}</span>
+                </div>
+                <span style={{fontSize:11, fontWeight:700, color:cfg.color, background:cfg.bg, padding:'1px 7px', borderRadius:999}}>{col.length}</span>
+              </div>
+
+              {/* Cards */}
+              <div style={{flex:1, overflowY:'auto', padding:8}}>
+                {!col.length && (
+                  <div style={{textAlign:'center', padding:'22px 8px', color:'#334155', fontSize:12, border:'1px dashed #1E3A5F', borderRadius:8, marginTop:4}}>No items</div>
+                )}
+                {col.map(function(item){
+                  return (
+                    <div key={item.id} style={{background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:10, padding:'11px 11px 9px', marginBottom:8}}>
+                      <div style={{fontSize:12.5, fontWeight:600, color:'#E2E8F0', marginBottom:3, lineHeight:1.35}}>{item.name}</div>
+                      <div style={{fontSize:11, color:'#475569', marginBottom:8}}>{item.vendor}</div>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+                        <span style={{fontSize:10.5, color:'#64748B', background:'#0F172A', padding:'2px 7px', borderRadius:5}}>{item.category}</span>
+                        <span style={{fontSize:12.5, fontWeight:700, color:'#E2E8F0'}}>{fmt(item.cost,currency)}</span>
+                      </div>
+                      {/* Move buttons */}
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+                        <div style={{display:'flex', gap:4}}>
+                          {si > 0 && (
+                            <button onClick={function(){onMove(item.id, STAGES[si-1]);}} style={{background:'rgba(148,163,184,.08)', border:'1px solid #334155', borderRadius:5, padding:'3px 7px', color:'#64748B', display:'flex', alignItems:'center', gap:3, fontSize:10.5}}>
+                              <Ico n="arrl" size={10}/>{STAGES[si-1]}
+                            </button>
+                          )}
+                          {si < STAGES.length-1 && (
+                            <button onClick={function(){onMove(item.id, STAGES[si+1]);}} style={{background:cfg.bg, border:'1px solid '+cfg.color+'28', borderRadius:5, padding:'3px 7px', color:cfg.color, display:'flex', alignItems:'center', gap:3, fontSize:10.5}}>
+                              {STAGES[si+1]}<Ico n="arrr" size={10}/>
+                            </button>
+                          )}
+                        </div>
+                        <div style={{display:'flex', gap:4}}>
+                          <button onClick={function(){onEdit(item);}} style={{background:'rgba(96,165,250,.1)', border:'1px solid rgba(96,165,250,.2)', borderRadius:5, padding:'3px 6px', color:'#60A5FA', display:'flex'}}>
+                            <Ico n="edit" size={10}/>
+                          </button>
+                          <button onClick={function(){onDelete(item.id);}} style={{background:'rgba(248,113,113,.1)', border:'1px solid rgba(248,113,113,.2)', borderRadius:5, padding:'3px 6px', color:'#F87171', display:'flex'}}>
+                            <Ico n="trash" size={10}/>
+                          </button>
+                        </div>
+                      </div>
+                      {/* Pipeline dots + deadline */}
+                      <div style={{paddingTop:8, borderTop:'1px solid #1E3A5F', display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                        <PipeDots stage={item.status}/>
+                        <span style={{fontSize:10, color:'#475569'}}>{item.deadline}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add shortcut */}
+              <div style={{padding:8, borderTop:'1px solid #1E293B', flexShrink:0}}>
+                <button
+                  onClick={function(){onAdd(stage);}}
+                  style={{width:'100%', padding:'6px', background:'transparent', border:'1px dashed #1E3A5F', borderRadius:7, color:'#334155', fontSize:11.5, display:'flex', alignItems:'center', justifyContent:'center', gap:4, transition:'all .15s'}}
+                  onMouseEnter={function(e){e.currentTarget.style.borderColor=cfg.color+'60';e.currentTarget.style.color=cfg.color;}}
+                  onMouseLeave={function(e){e.currentTarget.style.borderColor='#1E3A5F';e.currentTarget.style.color='#334155';}}
+                >
+                  <Ico n="plus" size={11}/> Add here
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Settings ───────────────────────────────────────────────── */
+function SettingsView(props) {
+  var currency = props.currency, setCurrency = props.setCurrency;
+  var categories = props.categories, onAddCat = props.onAddCat, onRemoveCat = props.onRemoveCat;
+  var onToast = props.onToast;
+  var _nc = useState(''), newCat = _nc[0], setNewCat = _nc[1];
+
+  var card = {background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'20px 22px', marginBottom:16};
+
+  async function addCat() {
+    var c = newCat.trim();
+    if (!c || categories.includes(c)) return;
+    await onAddCat(c);
+    setNewCat('');
+    onToast('Category "'+c+'" added');
+  }
+
+  return (
     <div style={{maxWidth:620}}>
       <div style={card}>
-        <div style={{fontSize:14,fontWeight:600,color:'#F1F5F9',marginBottom:6,display:'flex',alignItems:'center',gap:8}}>
-          <IDollar s={14} c={{color:'#F59E0B'}}/> Display Currency
+        <div style={{fontSize:14, fontWeight:600, color:'#F1F5F9', marginBottom:6, display:'flex', alignItems:'center', gap:8}}>
+          <Ico n="dollar" size={14} color="#F59E0B"/> Display Currency
         </div>
-        <p style={{fontSize:12,color:'#475569',margin:'0 0 12px'}}>Set the global currency used across all project budgets.</p>
-        <select style={{...INP,width:180,cursor:'pointer'}} value={currency} onChange={e=>{setCurrency(e.target.value);onToast('Currency updated');}}>
-          {['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'].map(c=><option key={c}>{c}</option>)}
+        <p style={{fontSize:12, color:'#475569', margin:'0 0 12px'}}>Set the global currency used across all project budgets.</p>
+        <select style={Object.assign({},INP,{width:180,cursor:'pointer'})} value={currency} onChange={function(e){setCurrency(e.target.value);onToast('Currency updated');}}>
+          {['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'].map(function(c){return <option key={c} value={c}>{c}</option>;})}
         </select>
       </div>
-      <div style={{...card,marginBottom:0}}>
-        <div style={{fontSize:14,fontWeight:600,color:'#F1F5F9',marginBottom:6,display:'flex',alignItems:'center',gap:8}}>
-          <ITag s={14} c={{color:'#34D399'}}/> Equipment Categories
+      <div style={Object.assign({},card,{marginBottom:0})}>
+        <div style={{fontSize:14, fontWeight:600, color:'#F1F5F9', marginBottom:6, display:'flex', alignItems:'center', gap:8}}>
+          <Ico n="tag" size={14} color="#34D399"/> Equipment Categories
         </div>
-        <p style={{fontSize:12,color:'#475569',margin:'0 0 14px'}}>Manage categories available when adding equipment to any project.</p>
-        <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
-          {categories.map((c,idx)=>(
-            <div key={c} style={{display:'flex',alignItems:'center',gap:6,background:'#0F172A',border:'1px solid #334155',borderRadius:8,padding:'5px 12px'}}>
-              <span style={{width:7,height:7,borderRadius:'50%',background:CC[idx%CC.length],flexShrink:0}}/>
-              <span style={{fontSize:12.5,color:'#94A3B8'}}>{c}</span>
-              {categories.length>2&&<button onClick={()=>{onRemoveCat(c);onToast('Category removed','info');}} style={{background:'none',border:'none',color:'#475569',display:'flex',marginLeft:2,cursor:'pointer'}}><IX s={11}/></button>}
-            </div>
-          ))}
+        <p style={{fontSize:12, color:'#475569', margin:'0 0 14px'}}>Manage categories available when adding equipment.</p>
+        <div style={{display:'flex', flexWrap:'wrap', gap:8, marginBottom:14}}>
+          {categories.map(function(c, idx){
+            return (
+              <div key={c} style={{display:'flex', alignItems:'center', gap:6, background:'#0F172A', border:'1px solid #334155', borderRadius:8, padding:'5px 12px'}}>
+                <span style={{width:7, height:7, borderRadius:'50%', background:CC[idx%CC.length], flexShrink:0}}/>
+                <span style={{fontSize:12.5, color:'#94A3B8'}}>{c}</span>
+                {categories.length > 2 && (
+                  <button onClick={function(){onRemoveCat(c);onToast('Category removed','info');}} style={{background:'none', border:'none', color:'#475569', display:'flex', marginLeft:2}}>
+                    <Ico n="x" size={11}/>
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <div style={{display:'flex',gap:8}}>
-          <input style={{...INP,flex:1}} value={newCat} placeholder="New category…" onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCat()}/>
-          <button onClick={addCat} style={{padding:'9px 16px',background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.25)',borderRadius:8,color:'#34D399',fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
-            <IPlusC s={14}/> Add
+        <div style={{display:'flex', gap:8}}>
+          <input style={Object.assign({},INP,{flex:1})} value={newCat} placeholder="New category…" onChange={function(e){setNewCat(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCat();}}/>
+          <button onClick={addCat} style={{padding:'9px 16px', background:'rgba(52,211,153,.12)', border:'1px solid rgba(52,211,153,.25)', borderRadius:8, color:'#34D399', fontSize:13, display:'flex', alignItems:'center', gap:6}}>
+            <Ico n="plusc" size={14}/> Add
           </button>
         </div>
       </div>
@@ -611,166 +955,217 @@ function SettingsView({currency,setCurrency,categories,onAddCat,onRemoveCat,onTo
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
    MAIN APP
-   ═══════════════════════════════════════════════════════════════ */
-function App(){
-  const[projects,   setProjects]  =useState(DEMO_PROJECTS);
-  const[items,      setItems]     =useState(DEMO_ITEMS);
-  const[categories, setCats]      =useState(DEMO_CATS);
-  const[loading,    setLoading]   =useState(!DEMO);
-  const[tab,        setTab]       =useState('dashboard');
-  const[pid,        setPid]       =useState(null);
-  const[showItem,   setShowItem]  =useState(false);
-  const[showProj,   setShowProj]  =useState(false);
-  const[editItem,   setEditItem]  =useState(null);
-  const[editProj,   setEditProj]  =useState(null);
-  const[defStage,   setDefStage]  =useState('Creation');
-  const[currency,   setCurrency]  =useState('USD');
-  const[toasts,     setToasts]    =useState([]);
+   ═══════════════════════════════════════════════════ */
+function App() {
+  /* Auth state */
+  var _au = useState(null),  user = _au[0],  setUser = _au[1];
+  var _al = useState(!DEMO && db !== null), authLoading = _al[0], setAuthLoading = _al[1];
 
-  /* Load from Supabase if credentials are real */
-  useEffect(()=>{
-    if(DEMO||!db)return;
-    (async()=>{
-      try{
-        const[{data:p,error:pe},{data:i,error:ie},{data:c,error:ce}]=await Promise.all([
-          db.from('projects').select('*').order('created_at'),
-          db.from('items').select('*').order('created_at'),
-          db.from('categories').select('*').order('name'),
-        ]);
-        if(pe||ie||ce)throw pe||ie||ce;
-        if(p&&p.length)setProjects(p);
-        if(i&&i.length)setItems(i.map(toApp));
-        if(c&&c.length)setCats(c.map(x=>x.name));
-      }catch(e){console.error('Supabase load error:',e);}
-      finally{setLoading(false);}
-    })();
-  },[]);
+  /* App state */
+  var _pr = useState(DEMO_PROJECTS), projects = _pr[0],  setProjects = _pr[1];
+  var _it = useState(DEMO_ITEMS),    items = _it[0],     setItems = _it[1];
+  var _ca = useState(DEMO_CATS),     categories = _ca[0],setCats = _ca[1];
+  var _dl = useState(false),         dataLoading = _dl[0], setDataLoading = _dl[1];
+
+  /* UI state */
+  var _tb = useState('dashboard'), tab = _tb[0],  setTab = _tb[1];
+  var _pi = useState(null),        pid = _pi[0],  setPid = _pi[1];
+  var _si = useState(false),       showItem = _si[0], setShowItem = _si[1];
+  var _sp = useState(false),       showProj = _sp[0], setShowProj = _sp[1];
+  var _ei = useState(null),        editItem = _ei[0], setEditItem = _ei[1];
+  var _ep = useState(null),        editProj = _ep[0], setEditProj = _ep[1];
+  var _ds = useState('Creation'),  defStage = _ds[0], setDefStage = _ds[1];
+  var _cu = useState('USD'),       currency = _cu[0], setCurrency = _cu[1];
+  var _ts = useState([]),          toasts = _ts[0],   setToasts = _ts[1];
 
   /* Toast helper */
-  const toast=useCallback((msg,type='success')=>{
-    const id=Date.now()+Math.random();
-    setToasts(p=>[...p,{id,message:msg,type}]);
-    setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),3500);
-  },[]);
+  var toast = useCallback(function(msg, type) {
+    var id = Date.now() + Math.random();
+    setToasts(function(p){ return p.concat([{id:id, message:msg, type:type||'success'}]); });
+    setTimeout(function(){ setToasts(function(p){ return p.filter(function(t){return t.id!==id;}); }); }, 3500);
+  }, []);
 
-  /* ── Project CRUD ─────────────────────────────────────────── */
-  const saveProject=async data=>{
-    if(DEMO||!db){
-      if(data.id){setProjects(p=>p.map(j=>j.id===data.id?{...j,...data}:j));toast('Project updated');}
-      else{setProjects(p=>[...p,{...data,id:uid(),created_at:new Date().toISOString()}]);toast('Project created');}
-    }else{
-      if(data.id){
-        const{data:u}=await db.from('projects').update(data).eq('id',data.id).select().single();
-        setProjects(p=>p.map(j=>j.id===data.id?u:j));toast('Project updated');
-      }else{
-        const{id,...rest}=data;
-        const{data:u}=await db.from('projects').insert(rest).select().single();
-        setProjects(p=>[...p,u]);toast('Project created');
+  /* Auth setup (only in live mode) */
+  useEffect(function() {
+    if (DEMO || !db) { setAuthLoading(false); return; }
+    db.auth.getSession().then(function(r) {
+      setUser(r.data && r.data.session ? r.data.session.user : null);
+      setAuthLoading(false);
+    });
+    var listener = db.auth.onAuthStateChange(function(event, session) {
+      setUser(session ? session.user : null);
+    });
+    return function() {
+      if (listener && listener.data && listener.data.subscription) {
+        listener.data.subscription.unsubscribe();
+      }
+    };
+  }, []);
+
+  /* Load data from Supabase when user logs in */
+  useEffect(function() {
+    if (DEMO || !db || !user) return;
+    setDataLoading(true);
+    Promise.all([
+      db.from('projects').select('*').order('created_at'),
+      db.from('items').select('*').order('created_at'),
+      db.from('categories').select('*').order('name'),
+    ]).then(function(results) {
+      var p = results[0], i = results[1], c = results[2];
+      if (!p.error && p.data) setProjects(p.data);
+      if (!i.error && i.data) setItems(i.data.map(toApp));
+      if (!c.error && c.data && c.data.length) setCats(c.data.map(function(x){return x.name;}));
+      setDataLoading(false);
+    }).catch(function(e) {
+      console.error('Load error:', e);
+      setDataLoading(false);
+    });
+  }, [user]);
+
+  /* Logout */
+  async function handleLogout() {
+    if (db) await db.auth.signOut();
+    setProjects(DEMO_PROJECTS);
+    setItems(DEMO_ITEMS);
+    setCats(DEMO_CATS);
+  }
+
+  /* ── Project CRUD ──────────────────────────────────────── */
+  async function saveProject(data) {
+    if (DEMO || !db) {
+      if (data.id) { setProjects(function(p){return p.map(function(j){return j.id===data.id?Object.assign({},j,data):j;});}); toast('Project updated'); }
+      else { setProjects(function(p){return p.concat([Object.assign({},data,{id:uid(),created_at:new Date().toISOString()})]);});  toast('Project created'); }
+    } else {
+      if (data.id) {
+        var r1 = await db.from('projects').update(data).eq('id',data.id).select().single();
+        if (r1.data) setProjects(function(p){return p.map(function(j){return j.id===data.id?r1.data:j;});});
+        toast('Project updated');
+      } else {
+        var d1 = Object.assign({},data); delete d1.id;
+        var r2 = await db.from('projects').insert(d1).select().single();
+        if (r2.data) setProjects(function(p){return p.concat([r2.data]);});
+        toast('Project created');
       }
     }
-    setShowProj(false);setEditProj(null);
-  };
-  const deleteProject=async id=>{
-    if(!DEMO&&db)await db.from('projects').delete().eq('id',id);
-    setProjects(p=>p.filter(j=>j.id!==id));
-    setItems(i=>i.filter(x=>x.projectId!==id));
-    if(pid===id)setPid(null);
+    setShowProj(false); setEditProj(null);
+  }
+
+  async function deleteProject(id) {
+    if (!DEMO && db) await db.from('projects').delete().eq('id',id);
+    setProjects(function(p){return p.filter(function(j){return j.id!==id;});});
+    setItems(function(i){return i.filter(function(x){return x.projectId!==id;});});
+    if (pid===id) setPid(null);
     toast('Project deleted','info');
-  };
+  }
 
-  /* ── Item CRUD ────────────────────────────────────────────── */
-  const saveItem=async data=>{
-    if(DEMO||!db){
-      if(data.id){setItems(p=>p.map(i=>i.id===data.id?{...i,...data}:i));toast('Equipment updated');}
-      else{setItems(p=>[...p,{...data,id:uid(),project_id:data.projectId}]);toast('Equipment added');}
-    }else{
-      const row=toDB(data);
-      if(data.id){
-        const{data:u}=await db.from('items').update(row).eq('id',data.id).select().single();
-        setItems(p=>p.map(i=>i.id===data.id?toApp(u):i));toast('Equipment updated');
-      }else{
-        const{id,...rest}=row;
-        const{data:u}=await db.from('items').insert(rest).select().single();
-        setItems(p=>[...p,toApp(u)]);toast('Equipment added');
+  /* ── Item CRUD ─────────────────────────────────────────── */
+  async function saveItem(data) {
+    if (DEMO || !db) {
+      if (data.id) { setItems(function(p){return p.map(function(i){return i.id===data.id?Object.assign({},i,data):i;});}); toast('Equipment updated'); }
+      else { setItems(function(p){return p.concat([Object.assign({},data,{id:uid()})]);});  toast('Equipment added'); }
+    } else {
+      var row = toDB(data);
+      if (data.id) {
+        var r1 = await db.from('items').update(row).eq('id',data.id).select().single();
+        if (r1.data) setItems(function(p){return p.map(function(i){return i.id===data.id?toApp(r1.data):i;});});
+        toast('Equipment updated');
+      } else {
+        var d1 = Object.assign({},row); delete d1.id;
+        var r2 = await db.from('items').insert(d1).select().single();
+        if (r2.data) setItems(function(p){return p.concat([toApp(r2.data)]);});
+        toast('Equipment added');
       }
     }
-    setShowItem(false);setEditItem(null);
-  };
-  const deleteItem=async id=>{
-    if(!DEMO&&db)await db.from('items').delete().eq('id',id);
-    setItems(p=>p.filter(i=>i.id!==id));toast('Equipment removed','info');
-  };
-  const moveItem=async(id,status)=>{
-    if(!DEMO&&db)await db.from('items').update({status}).eq('id',id);
-    setItems(p=>p.map(i=>i.id===id?{...i,status}:i));toast('Moved to '+status);
-  };
+    setShowItem(false); setEditItem(null);
+  }
 
-  /* ── Category CRUD ────────────────────────────────────────── */
-  const addCat=async name=>{
-    if(!DEMO&&db)await db.from('categories').insert({name});
-    setCats(p=>[...p,name]);
-  };
-  const removeCat=async name=>{
-    if(!DEMO&&db)await db.from('categories').delete().eq('name',name);
-    setCats(p=>p.filter(x=>x!==name));
-  };
+  async function deleteItem(id) {
+    if (!DEMO && db) await db.from('items').delete().eq('id',id);
+    setItems(function(p){return p.filter(function(i){return i.id!==id;});});
+    toast('Equipment removed','info');
+  }
 
-  /* Loading spinner (only when connecting to real Supabase) */
-  if(loading)return(
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#0F172A',flexDirection:'column',gap:14}}>
-      <div style={{width:36,height:36,border:'3px solid #1E293B',borderTop:'3px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
-      <span style={{fontSize:13,color:'#475569'}}>Connecting to database…</span>
-    </div>
-  );
+  async function moveItem(id, status) {
+    if (!DEMO && db) await db.from('items').update({status:status}).eq('id',id);
+    setItems(function(p){return p.map(function(i){return i.id===id?Object.assign({},i,{status:status}):i;});});
+    toast('Moved to '+status);
+  }
 
-  const selProj=projects.find(p=>p.id===pid);
-  const pageTitle=tab==='dashboard'?'Overview Dashboard':tab==='settings'?'Settings':selProj?selProj.name:'Projects';
-  const pageSub=tab==='dashboard'?'Procurement performance across all projects':tab==='settings'?'Manage categories and display settings':selProj?selProj.description:'Create and manage your procurement projects';
-  const NAV=[{id:'dashboard',Icon:IGrid,label:'Dashboard'},{id:'projects',Icon:IFolder,label:'Projects'},{id:'settings',Icon:IGear,label:'Settings'}];
+  /* ── Category CRUD ─────────────────────────────────────── */
+  async function addCat(name) {
+    if (!DEMO && db) await db.from('categories').insert({name:name});
+    setCats(function(p){return p.concat([name]);});
+  }
+  async function removeCat(name) {
+    if (!DEMO && db) await db.from('categories').delete().eq('name',name);
+    setCats(function(p){return p.filter(function(x){return x!==name;});});
+  }
 
-  return(
-    <div style={{display:'flex',height:'100vh',background:'#0F172A',color:'#E2E8F0',overflow:'hidden'}}>
+  /* Loading states */
+  if (authLoading) {
+    return (
+      <div style={{display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0F172A', flexDirection:'column', gap:14}}>
+        <div style={{width:36, height:36, border:'3px solid #1E293B', borderTop:'3px solid #F59E0B', borderRadius:'50%', animation:'spin .7s linear infinite'}}/>
+        <span style={{fontSize:13, color:'#475569'}}>Connecting…</span>
+      </div>
+    );
+  }
+
+  /* Login gate */
+  if (!DEMO && !user) {
+    return <LoginPage onLogin={setUser}/>;
+  }
+
+  var selProj = projects.find(function(p){return p.id===pid;});
+  var pageTitle = tab==='dashboard' ? 'Overview Dashboard' : tab==='settings' ? 'Settings' : selProj ? selProj.name : 'Projects';
+  var pageSub   = tab==='dashboard' ? 'Procurement performance across all projects' : tab==='settings' ? 'Manage categories and display settings' : selProj ? selProj.description : 'Create and manage your procurement projects';
+  var NAV = [{id:'dashboard',icon:'dashboard',label:'Dashboard'},{id:'projects',icon:'folder',label:'Projects'},{id:'settings',icon:'settings',label:'Settings'}];
+
+  return (
+    <div style={{display:'flex', height:'100vh', background:'#0F172A', overflow:'hidden'}}>
 
       {/* ── Sidebar ─────────────────────────────────────────── */}
-      <aside style={{width:212,minWidth:212,background:'#080F1E',borderRight:'1px solid #1E293B',display:'flex',flexDirection:'column'}}>
-        <div style={{padding:'18px 14px',borderBottom:'1px solid #1E293B'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <div style={{width:34,height:34,borderRadius:9,background:'#F59E0B',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-              <IBox s={16} c={{color:'#000'}}/>
+      <aside style={{width:212, minWidth:212, background:'#080F1E', borderRight:'1px solid #1E293B', display:'flex', flexDirection:'column'}}>
+        {/* Logo */}
+        <div style={{padding:'18px 14px', borderBottom:'1px solid #1E293B'}}>
+          <div style={{display:'flex', alignItems:'center', gap:10}}>
+            <div style={{width:34, height:34, borderRadius:9, background:'#F59E0B', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+              <Ico n="package" size={16} color="#000"/>
             </div>
             <div>
-              <div style={{fontSize:13.5,fontWeight:700,color:'#F1F5F9'}}>ProcureFlow</div>
-              <div style={{fontSize:10,color:'#334155'}}>{DEMO?'Demo Mode':'Enterprise v2.1'}</div>
+              <div style={{fontSize:13.5, fontWeight:700, color:'#F1F5F9'}}>ProcureFlow</div>
+              <div style={{fontSize:10, color:'#334155'}}>{DEMO ? 'Demo Mode' : 'Enterprise v2.1'}</div>
             </div>
           </div>
         </div>
 
-        <nav style={{padding:'14px 10px',flex:1,overflowY:'auto'}}>
-          <div style={{fontSize:9.5,color:'#334155',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',padding:'0 8px',marginBottom:8}}>Navigation</div>
-          {NAV.map(({id,Icon,label})=>{
-            const act=tab===id;
-            return(
-              <button key={id} onClick={()=>{setTab(id);if(id!=='projects')setPid(null);}}
-                style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:8,border:'none',marginBottom:2,textAlign:'left',background:act?'rgba(245,158,11,.1)':'transparent',color:act?'#F59E0B':'#64748B',cursor:'pointer'}}>
-                <Icon s={16}/>
-                <span style={{fontSize:13,fontWeight:act?600:400}}>{label}</span>
-                {act&&<span style={{marginLeft:'auto',width:5,height:5,borderRadius:'50%',background:'#F59E0B'}}/>}
+        {/* Nav */}
+        <nav style={{padding:'14px 10px', flex:1, overflowY:'auto'}}>
+          <div style={{fontSize:9.5, color:'#334155', fontWeight:700, letterSpacing:'1px', textTransform:'uppercase', padding:'0 8px', marginBottom:8}}>Navigation</div>
+          {NAV.map(function(n){
+            var act = tab===n.id;
+            return (
+              <button key={n.id} onClick={function(){setTab(n.id);if(n.id!=='projects')setPid(null);}}
+                style={{width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 10px', borderRadius:8, border:'none', marginBottom:2, textAlign:'left', background:act?'rgba(245,158,11,.1)':'transparent', color:act?'#F59E0B':'#64748B'}}>
+                <Ico n={n.icon} size={16}/>
+                <span style={{fontSize:13, fontWeight:act?600:400}}>{n.label}</span>
+                {act && <span style={{marginLeft:'auto', width:5, height:5, borderRadius:'50%', background:'#F59E0B'}}/>}
               </button>
             );
           })}
 
-          {projects.length>0&&(
-            <div style={{marginTop:14,paddingTop:10,borderTop:'1px solid #1E293B'}}>
-              <div style={{fontSize:9.5,color:'#334155',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',padding:'0 8px',marginBottom:8}}>Projects</div>
-              {projects.map(p=>{
-                const act=pid===p.id&&tab==='projects';
-                return(
-                  <button key={p.id} onClick={()=>{setTab('projects');setPid(p.id);}}
-                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:'none',marginBottom:2,textAlign:'left',background:act?p.color+'14':'transparent',color:act?p.color:'#475569',cursor:'pointer'}}>
-                    <span style={{width:6,height:6,borderRadius:'50%',background:p.color,flexShrink:0}}/>
-                    <span style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:act?600:400}}>{p.name}</span>
+          {projects.length > 0 && (
+            <div style={{marginTop:14, paddingTop:10, borderTop:'1px solid #1E293B'}}>
+              <div style={{fontSize:9.5, color:'#334155', fontWeight:700, letterSpacing:'1px', textTransform:'uppercase', padding:'0 8px', marginBottom:8}}>Projects</div>
+              {projects.map(function(p){
+                var act = pid===p.id && tab==='projects';
+                return (
+                  <button key={p.id} onClick={function(){setTab('projects');setPid(p.id);}}
+                    style={{width:'100%', display:'flex', alignItems:'center', gap:8, padding:'7px 10px', borderRadius:7, border:'none', marginBottom:2, textAlign:'left', background:act?p.color+'14':'transparent', color:act?p.color:'#475569'}}>
+                    <span style={{width:6, height:6, borderRadius:'50%', background:p.color, flexShrink:0}}/>
+                    <span style={{fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:act?600:400}}>{p.name}</span>
                   </button>
                 );
               })}
@@ -778,63 +1173,85 @@ function App(){
           )}
         </nav>
 
-        <div style={{padding:'14px 12px',borderTop:'1px solid #1E293B'}}>
-          <div style={{display:'flex',alignItems:'center',gap:9}}>
-            <div style={{width:30,height:30,borderRadius:'50%',background:'rgba(245,158,11,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#F59E0B',flexShrink:0}}>JD</div>
-            <div>
-              <div style={{fontSize:12.5,fontWeight:500,color:'#E2E8F0'}}>John Doe</div>
-              <div style={{fontSize:10.5,color:'#475569'}}>Procurement Lead</div>
+        {/* User / logout */}
+        <div style={{padding:'14px 12px', borderTop:'1px solid #1E293B'}}>
+          <div style={{display:'flex', alignItems:'center', gap:9}}>
+            <div style={{width:30, height:30, borderRadius:'50%', background:'rgba(245,158,11,.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#F59E0B', flexShrink:0}}>
+              {DEMO ? 'DM' : (user && user.email ? user.email[0].toUpperCase() : '?')}
             </div>
+            <div style={{flex:1, minWidth:0}}>
+              <div style={{fontSize:12, fontWeight:500, color:'#E2E8F0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                {DEMO ? 'Demo User' : (user && user.email ? user.email : 'User')}
+              </div>
+              <div style={{fontSize:10, color:'#475569'}}>{DEMO ? 'Demo Mode' : 'Authenticated'}</div>
+            </div>
+            {!DEMO && (
+              <button onClick={handleLogout} title="Sign out" style={{background:'none', border:'none', color:'#475569', display:'flex', padding:4, flexShrink:0}}>
+                <Ico n="logout" size={14}/>
+              </button>
+            )}
           </div>
         </div>
       </aside>
 
-      {/* ── Main ──────────────────────────────────────────────── */}
-      <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      {/* ── Main content ────────────────────────────────────── */}
+      <div style={{flex:1, overflow:'hidden', display:'flex', flexDirection:'column'}}>
 
-        {/* Demo mode banner */}
-        {DEMO&&(
-          <div style={{background:'rgba(245,158,11,.1)',borderBottom:'1px solid rgba(245,158,11,.2)',padding:'8px 24px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#F59E0B',flexShrink:0}}>
-            <IWarn s={13}/>
-            <span><strong>Demo mode</strong> — data is local only. Open <code style={{background:'rgba(245,158,11,.15)',padding:'1px 5px',borderRadius:4}}>index.html</code> and replace <code style={{background:'rgba(245,158,11,.15)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_URL</code> / <code style={{background:'rgba(245,158,11,.15)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_ANON_KEY</code> to enable persistence.</span>
+        {/* Demo banner */}
+        {DEMO && (
+          <div style={{background:'rgba(245,158,11,.08)', borderBottom:'1px solid rgba(245,158,11,.2)', padding:'7px 24px', display:'flex', alignItems:'center', gap:8, fontSize:12, color:'#F59E0B', flexShrink:0}}>
+            <Ico n="alert" size={13}/>
+            <span><strong>Demo Mode</strong> — data is not saved. Open <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>index.html</code> and replace <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_URL</code> and <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_ANON_KEY</code> to enable persistence.</span>
           </div>
         )}
 
-        <header style={{padding:'13px 24px',borderBottom:'1px solid #1E293B',display:'flex',alignItems:'center',justifyContent:'space-between',background:'#0A1628',flexShrink:0}}>
+        {/* Header */}
+        <header style={{padding:'13px 24px', borderBottom:'1px solid #1E293B', display:'flex', alignItems:'center', justifyContent:'space-between', background:'#0A1628', flexShrink:0}}>
           <div>
-            <h1 style={{margin:0,fontSize:16,fontWeight:700,color:'#F1F5F9'}}>{pageTitle}</h1>
-            <p style={{margin:0,marginTop:2,fontSize:11.5,color:'#475569'}}>{pageSub}</p>
+            <h1 style={{margin:0, fontSize:16, fontWeight:700, color:'#F1F5F9'}}>{pageTitle}</h1>
+            <p style={{margin:0, marginTop:2, fontSize:11.5, color:'#475569'}}>{pageSub}</p>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:9}}>
-            <button style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,padding:'7px 9px',color:'#475569',display:'flex'}}><IBell s={15}/></button>
-            {tab==='projects'&&!pid&&(
-              <button onClick={()=>{setEditProj(null);setShowProj(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}>
-                <IPlus s={13}/> New Project
+          <div style={{display:'flex', alignItems:'center', gap:9}}>
+            <button style={{background:'#1E293B', border:'1px solid #334155', borderRadius:8, padding:'7px 9px', color:'#475569', display:'flex'}}>
+              <Ico n="bell" size={15}/>
+            </button>
+            {tab==='projects' && !pid && (
+              <button onClick={function(){setEditProj(null);setShowProj(true);}} style={{background:'#F59E0B', border:'none', borderRadius:8, padding:'8px 16px', color:'#000', fontWeight:700, fontSize:12.5, display:'flex', alignItems:'center', gap:6}}>
+                <Ico n="plus" size={13}/> New Project
               </button>
             )}
-            {tab==='projects'&&pid&&(
-              <button onClick={()=>{setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}>
-                <IPlus s={13}/> Add Equipment
+            {tab==='projects' && pid && (
+              <button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B', border:'none', borderRadius:8, padding:'8px 16px', color:'#000', fontWeight:700, fontSize:12.5, display:'flex', alignItems:'center', gap:6}}>
+                <Ico n="plus" size={13}/> Add Equipment
               </button>
             )}
           </div>
         </header>
 
-        <main style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
-          {tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
-          {tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} onSelect={id=>setPid(id)} onEdit={p=>{setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
-          {tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={currency} onBack={()=>setPid(null)} onAdd={stage=>{setDefStage(stage);setEditItem(null);setShowItem(true);}} onEdit={item=>{setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
-          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} onToast={toast}/>}
+        {/* Page body */}
+        <main style={{flex:1, overflowY:'auto', padding:'20px 24px'}}>
+          {dataLoading && (
+            <div style={{display:'flex', alignItems:'center', justifyContent:'center', height:200, gap:10, color:'#475569', fontSize:13}}>
+              <div style={{width:20, height:20, border:'2px solid #1E293B', borderTop:'2px solid #F59E0B', borderRadius:'50%', animation:'spin .7s linear infinite'}}/>
+              Loading data…
+            </div>
+          )}
+          {!dataLoading && tab==='dashboard' && <Dashboard projects={projects} items={items} currency={currency}/>}
+          {!dataLoading && tab==='projects' && !pid && <ProjectsList projects={projects} items={items} currency={currency} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
+          {!dataLoading && tab==='projects' && pid && selProj && <Kanban project={selProj} items={items} categories={categories} currency={currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
+          {tab==='settings' && <SettingsView currency={currency} setCurrency={setCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} onToast={toast}/>}
         </main>
       </div>
 
-      {/* ── Modals ────────────────────────────────────────────── */}
-      {showProj&&<ProjectModal project={editProj} onSave={saveProject} onClose={()=>{setShowProj(false);setEditProj(null);}}/>}
-      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currency={currency} defStage={defStage} onSave={saveItem} onClose={()=>{setShowItem(false);setEditItem(null);}}/>}
+      {/* Modals */}
+      {showProj && <ProjectModal project={editProj} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
+      {showItem && <ItemModal item={editItem} projectId={pid} categories={categories} currency={currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
 
-      {/* ── Toasts ────────────────────────────────────────────── */}
-      <div style={{position:'fixed',bottom:20,right:20,display:'flex',flexDirection:'column',gap:8,zIndex:2000}}>
-        {toasts.map(t=><Toast key={t.id} {...t} onClose={()=>setToasts(p=>p.filter(x=>x.id!==t.id))}/>)}
+      {/* Toasts */}
+      <div style={{position:'fixed', bottom:20, right:20, display:'flex', flexDirection:'column', gap:8, zIndex:2000}}>
+        {toasts.map(function(t){
+          return <Toast key={t.id} message={t.message} type={t.type} onClose={function(){setToasts(function(p){return p.filter(function(x){return x.id!==t.id;});});}}/>;
+        })}
       </div>
     </div>
   );
