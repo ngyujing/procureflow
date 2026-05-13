@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProcureFlow — Procurement Tracker</title>
+
+  <!-- ── CDN Dependencies ─────────────────────────────────── -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.0/umd/Recharts.js"></script>
+  <script src="https://unpkg.com/lucide-react@0.383.0/dist/umd/lucide-react.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; }
+    body { background: #0F172A; color: #E2E8F0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    @keyframes slideIn { from { opacity:0; transform:translateX(16px); } to { opacity:1; transform:translateX(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    input:focus, select:focus { border-color: #F59E0B !important; box-shadow: 0 0 0 2px rgba(245,158,11,0.12) !important; }
+    input, select { outline: none; }
+    option { background: #1E293B; color: #E2E8F0; }
+    button { cursor: pointer; transition: opacity 0.1s; }
+    button:active { transform: scale(0.97); opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useMemo, useCallback } = React;
+    const { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } = Recharts;
+    const { createClient } = supabase;
+    const {
+      LayoutDashboard, Folder, Settings, Plus, Search,
+      Pencil, Trash2, X, DollarSign, TrendingUp, Package,
+      Bell, CheckCircle, Tag, Save, PlusCircle, AlertCircle,
+      ChevronRight, ChevronLeft, ArrowRight, ArrowLeft
+    } = LucideReact;
+
+    // ════════════════════════════════════════════════════════════
+    //  REPLACE THESE TWO VALUES WITH YOUR SUPABASE CREDENTIALS
+    // ════════════════════════════════════════════════════════════
+    const SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1eHN4cWpndHJsZHFycW91bXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTMzMjIsImV4cCI6MjA5NDIyOTMyMn0.RnxrCXzTeXp3zXyBJt3-t6JQbp3dPTdQbkqqp_NKEvI';
+    // ════════════════════════════════════════════════════════════
+
+    const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ── Constants ─────────────────────────────────────────────
+    const STAGES = ['Creation', 'Order', 'Received', 'Delivered'];
+    const STAGE_CFG = {
+      Creation:  { color: '#94A3B8', bg: 'rgba(148,163,184,0.12)' },
+      Order:     { color: '#60A5FA', bg: 'rgba(96,165,250,0.12)'  },
+      Received:  { color: '#FBBF24', bg: 'rgba(251,191,36,0.12)'  },
+      Delivered: { color: '#34D399', bg: 'rgba(52,211,153,0.12)'  },
+    };
+    const PROJ_COLORS = ['#3B82F6', '#F59E0B', '#A78BFA', '#34D399', '#F87171', '#22D3EE'];
+    const CAT_COLORS  = ['#F59E0B', '#3B82F6', '#10B981', '#8B5CF6', '#EF4444', '#06B6D4'];
+
+    const fmt = (v, cur = 'USD') =>
+      new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(v);
+    const toApp = r => r ? { ...r, projectId: r.project_id } : null;
+    const toDB  = d => { const r = { ...d, project_id: d.projectId }; delete r.projectId; return r; };
+
+    // ── Spinner ───────────────────────────────────────────────
+    function Spinner() {
+      return (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0F172A', flexDirection:'column', gap:14 }}>
+          <div style={{ width:36, height:36, border:'3px solid #1E293B', borderTop:'3px solid #F59E0B', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
+          <span style={{ fontSize:13, color:'#475569' }}>Loading ProcureFlow…</span>
+        </div>
+      );
+    }
+
+    // ── Toast ─────────────────────────────────────────────────
+    function Toast({ message, type, onClose }) {
+      const c = { success:'#34D399', error:'#F87171', info:'#60A5FA', warning:'#FBBF24' }[type] || '#34D399';
+      return (
+        <div style={{ background:'#1E293B', border:`1px solid ${c}40`, borderLeft:`3px solid ${c}`, borderRadius:8, padding:'10px 14px', display:'flex', alignItems:'center', gap:10, minWidth:260, animation:'slideIn 0.2s ease' }}>
+          <CheckCircle size={14} style={{ color:c, flexShrink:0 }} />
+          <span style={{ fontSize:13, color:'#E2E8F0', flex:1 }}>{message}</span>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:'#475569', display:'flex', padding:2 }}><X size={13} /></button>
+        </div>
+      );
+    }
+
+    // ── Pipeline mini-dots ────────────────────────────────────
+    function PipelineProgress({ currentStage }) {
+      const idx = STAGES.indexOf(currentStage);
+      return (
+        <div style={{ display:'flex', alignItems:'center' }}>
+          {STAGES.map((s, i) => {
+            const done = i < idx, active = i === idx;
+            const cfg = STAGE_CFG[s];
+            return (
+              <React.Fragment key={s}>
+                <div style={{ width:8, height:8, borderRadius:'50%', background:(active||done)?cfg.color:'#334155', opacity:done?0.5:active?1:0.3, border:active?`2px solid ${cfg.color}`:'none', flexShrink:0 }} />
+                {i < STAGES.length - 1 && <div style={{ width:12, height:2, background:done?STAGE_CFG[STAGES[i+1]].color:'#334155', opacity:done?0.4:0.2 }} />}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // ── Modal shell ───────────────────────────────────────────
+    function Modal({ title, onClose, children, footer, width = 500 }) {
+      return (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.82)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+          <div style={{ background:'#1E293B', borderRadius:14, border:'1px solid #334155', width, maxWidth:'94vw' }}>
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid #334155', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <h3 style={{ margin:0, fontSize:14.5, fontWeight:700, color:'#F1F5F9' }}>{title}</h3>
+              <button onClick={onClose} style={{ background:'none', border:'none', color:'#475569', display:'flex', padding:4 }}><X size={16} /></button>
+            </div>
+            <div style={{ padding:'18px 20px' }}>{children}</div>
+            {footer && <div style={{ padding:'13px 20px', borderTop:'1px solid #334155', display:'flex', justifyContent:'flex-end', gap:9 }}>{footer}</div>}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Project Modal ─────────────────────────────────────────
+    function ProjectModal({ project, onSave, onClose }) {
+      const [form, setForm] = useState(project || { name:'', description:'', budget:'', color: PROJ_COLORS[0] });
+      const [err, setErr]   = useState('');
+      const [saving, setSaving] = useState(false);
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const submit = async () => {
+        if (!form.name.trim()) return setErr('Project name is required.');
+        if (!form.budget || isNaN(+form.budget) || +form.budget <= 0) return setErr('A valid budget is required.');
+        setErr(''); setSaving(true);
+        await onSave({ ...form, budget: +form.budget, id: project?.id });
+        setSaving(false);
+      };
+
+      const inp = { width:'100%', background:'#0F172A', border:'1px solid #334155', borderRadius:8, padding:'9px 12px', color:'#E2E8F0', fontSize:13.5 };
+      const lbl = { fontSize:11.5, color:'#64748B', fontWeight:500, marginBottom:5, display:'block' };
+
+      return (
+        <Modal title={project ? 'Edit Project' : 'Create New Project'} onClose={onClose} width={460}
+          footer={<>
+            <button onClick={onClose} style={{ padding:'8px 18px', background:'transparent', border:'1px solid #334155', borderRadius:8, color:'#94A3B8', fontSize:13 }}>Cancel</button>
+            <button onClick={submit} disabled={saving} style={{ padding:'8px 20px', background:'#F59E0B', border:'none', borderRadius:8, color:'#000', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>
+              <Save size={13} />{saving ? 'Saving…' : project ? 'Save Changes' : 'Create Project'}
+            </button>
+          </>}>
+          <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+            <div><label style={lbl}>Project Name *</label><input style={inp} value={form.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. IT Infrastructure Upgrade" /></div>
+            <div><label style={lbl}>Description</label><input style={inp} value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Brief project description…" /></div>
+            <div><label style={lbl}>Budget (USD) *</label><input style={inp} type="number" min="0" value={form.budget} onChange={e=>set('budget',e.target.value)} placeholder="0" /></div>
+            <div>
+              <label style={lbl}>Project Colour</label>
+              <div style={{ display:'flex', gap:9 }}>
+                {PROJ_COLORS.map(c => <button key={c} onClick={()=>set('color',c)} style={{ width:28, height:28, borderRadius:'50%', background:c, border:form.color===c?'3px solid #F1F5F9':'3px solid transparent' }} />)}
+              </div>
+            </div>
+            {err && <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:7, fontSize:12.5, color:'#F87171' }}><AlertCircle size={13} style={{ flexShrink:0 }} />{err}</div>}
+          </div>
+        </Modal>
+      );
+    }
+
+    // ── Item Modal ────────────────────────────────────────────
+    function ItemModal({ item, projectId, categories, currency, defaultStage, onSave, onClose }) {
+      const [form, setForm] = useState(item || { name:'', category:categories[0]||'Hardware', vendor:'', status:defaultStage||'Creation', cost:'', deadline:'' });
+      const [err, setErr]   = useState('');
+      const [saving, setSaving] = useState(false);
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const submit = async () => {
+        if (!form.name.trim()) return setErr('Item name is required.');
+        if (!form.vendor.trim()) return setErr('Vendor is required.');
+        if (!form.cost || isNaN(+form.cost) || +form.cost <= 0) return setErr('Valid cost is required.');
+        if (!form.deadline) return setErr('Deadline is required.');
+        setErr(''); setSaving(true);
+        await onSave({ ...form, cost: +form.cost, id: item?.id, projectId: item?.projectId || projectId });
+        setSaving(false);
+      };
+
+      const inp = { width:'100%', background:'#0F172A', border:'1px solid #334155', borderRadius:8, padding:'9px 12px', color:'#E2E8F0', fontSize:13.5 };
+      const lbl = { fontSize:11.5, color:'#64748B', fontWeight:500, marginBottom:5, display:'block' };
+
+      return (
+        <Modal title={item ? 'Edit Equipment' : 'Add Equipment'} onClose={onClose}
+          footer={<>
+            <button onClick={onClose} style={{ padding:'8px 18px', background:'transparent', border:'1px solid #334155', borderRadius:8, color:'#94A3B8', fontSize:13 }}>Cancel</button>
+            <button onClick={submit} disabled={saving} style={{ padding:'8px 20px', background:'#F59E0B', border:'none', borderRadius:8, color:'#000', fontSize:13, fontWeight:700, display:'flex', alignItems:'center', gap:6 }}>
+              <Save size={13} />{saving ? 'Saving…' : item ? 'Save Changes' : 'Add Equipment'}
+            </button>
+          </>}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+            <div style={{ gridColumn:'1/-1' }}><label style={lbl}>Equipment / Item Name *</label><input style={inp} value={form.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Dell XPS Workstations (x10)" /></div>
+            <div><label style={lbl}>Category</label><select style={{ ...inp, cursor:'pointer' }} value={form.category} onChange={e=>set('category',e.target.value)}>{categories.map(c=><option key={c}>{c}</option>)}</select></div>
+            <div><label style={lbl}>Pipeline Stage</label><select style={{ ...inp, cursor:'pointer' }} value={form.status} onChange={e=>set('status',e.target.value)}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></div>
+            <div style={{ gridColumn:'1/-1' }}><label style={lbl}>Vendor *</label><input style={inp} value={form.vendor} onChange={e=>set('vendor',e.target.value)} placeholder="e.g. Dell Technologies" /></div>
+            <div><label style={lbl}>Cost ({currency}) *</label><input style={inp} type="number" min="0" value={form.cost} onChange={e=>set('cost',e.target.value)} placeholder="0" /></div>
+            <div><label style={lbl}>Deadline *</label><input style={{ ...inp, colorScheme:'dark' }} type="date" value={form.deadline} onChange={e=>set('deadline',e.target.value)} /></div>
+            {err && <div style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:8, padding:'8px 12px', background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.25)', borderRadius:7, fontSize:12.5, color:'#F87171' }}><AlertCircle size={13} style={{ flexShrink:0 }} />{err}</div>}
+          </div>
+        </Modal>
+      );
+    }
+
+    // ── Dashboard ─────────────────────────────────────────────
+    function DashboardView({ projects, items, currency }) {
+      const totalBudget = projects.reduce((s,p)=>s+p.budget,0);
+      const totalSpend  = items.reduce((s,i)=>s+i.cost,0);
+      const delivered   = items.filter(i=>i.status==='Delivered').length;
+      const pct = totalBudget ? Math.min(100,Math.round((totalSpend/totalBudget)*100)) : 0;
+
+      const projSpend = useMemo(()=>projects.map(p=>({
+        name: p.name.split(' ').slice(0,2).join(' '),
+        spend: items.filter(i=>i.projectId===p.id).reduce((s,i)=>s+i.cost,0),
+        color: p.color,
+      })),[projects,items]);
+
+      const stageData = STAGES.map(s=>({ name:s, count:items.filter(i=>i.status===s).length }));
+
+      return (
+        <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12 }}>
+            {[
+              [DollarSign, 'Total Budget', fmt(totalBudget,currency), `${projects.length} projects`,                                        '#F59E0B'],
+              [TrendingUp,  'Total Spend',  fmt(totalSpend,currency),  `${pct}% utilized`,                                                  '#3B82F6'],
+              [Package,     'Total Items',  items.length,               `${delivered} delivered`,                                            '#A78BFA'],
+              [CheckCircle, 'Completion',   `${items.length?Math.round((delivered/items.length)*100):0}%`, `${delivered} of ${items.length}`,'#34D399'],
+            ].map(([Icon,label,value,sub,color])=>(
+              <div key={label} style={{ background:'#1E293B', borderRadius:12, border:'1px solid #1E3A5F', padding:'18px 20px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                  <span style={{ fontSize:10.5, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.6px' }}>{label}</span>
+                  <div style={{ width:28, height:28, borderRadius:7, background:`${color}18`, display:'flex', alignItems:'center', justifyContent:'center' }}><Icon size={13} style={{ color }} /></div>
+                </div>
+                <div style={{ fontSize:24, fontWeight:700, color:'#F1F5F9', lineHeight:1 }}>{value}</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:5 }}>{sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr', gap:14 }}>
+            <div style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'18px 20px' }}>
+              <div style={{ fontSize:13, fontWeight:600, color:'#E2E8F0', marginBottom:16 }}>Spend by Project</div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={projSpend} barSize={28} margin={{ top:0,right:0,bottom:0,left:0 }}>
+                  <XAxis dataKey="name" tick={{ fill:'#475569', fontSize:10.5 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill:'#475569', fontSize:10 }} axisLine={false} tickLine={false} tickFormatter={v=>`$${(v/1000).toFixed(0)}k`} width={40} />
+                  <Tooltip contentStyle={{ background:'#0F172A', border:'1px solid #334155', borderRadius:8, fontSize:12 }} labelStyle={{ color:'#E2E8F0', fontWeight:600 }} formatter={v=>[fmt(v,currency),'Spend']} cursor={{ fill:'rgba(255,255,255,0.03)' }} />
+                  <Bar dataKey="spend" radius={[4,4,0,0]}>
+                    {projSpend.map((p,i)=><Cell key={i} fill={p.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'18px 20px', display:'flex', flexDirection:'column' }}>
+              <div style={{ fontSize:13, fontWeight:600, color:'#E2E8F0', marginBottom:14 }}>Pipeline Overview</div>
+              <div style={{ display:'flex', flexDirection:'column', gap:12, flex:1 }}>
+                {stageData.map(({name,count})=>{
+                  const cfg=STAGE_CFG[name]; const p=items.length?Math.round((count/items.length)*100):0;
+                  return (
+                    <div key={name}>
+                      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                        <span style={{ fontSize:12, color:cfg.color }}>{name}</span>
+                        <span style={{ fontSize:12, color:'#475569' }}>{count} ({p}%)</span>
+                      </div>
+                      <div style={{ height:5, background:'#0F172A', borderRadius:999 }}>
+                        <div style={{ height:'100%', borderRadius:999, width:`${p}%`, background:cfg.color, opacity:0.7 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop:16, paddingTop:14, borderTop:'1px solid #334155' }}>
+                <div style={{ fontSize:10.5, color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>Overall Delivery Rate</div>
+                <div style={{ fontSize:22, fontWeight:700, color:'#34D399' }}>{items.length?Math.round((delivered/items.length)*100):0}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'18px 20px' }}>
+            <div style={{ fontSize:13, fontWeight:600, color:'#E2E8F0', marginBottom:14 }}>Project Summary</div>
+            {projects.length === 0 && <div style={{ fontSize:13, color:'#475569', textAlign:'center', padding:'20px 0' }}>No projects yet — create one in the Projects tab.</div>}
+            {projects.map((p,idx)=>{
+              const pi=items.filter(i=>i.projectId===p.id);
+              const ps=pi.reduce((s,i)=>s+i.cost,0);
+              const pp=p.budget?Math.min(100,Math.round((ps/p.budget)*100)):0;
+              const pd=pi.filter(i=>i.status==='Delivered').length;
+              return (
+                <div key={p.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'10px 0', borderBottom:idx<projects.length-1?'1px solid #1E3A5F':'none' }}>
+                  <div style={{ width:9, height:9, borderRadius:'50%', background:p.color, flexShrink:0 }} />
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, color:'#E2E8F0', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', marginBottom:5 }}>{p.name}</div>
+                    <div style={{ height:3, background:'#0F172A', borderRadius:999 }}><div style={{ height:'100%', borderRadius:999, width:`${pp}%`, background:p.color }} /></div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:600, color:'#E2E8F0' }}>{fmt(ps,currency)}</div>
+                    <div style={{ fontSize:11, color:'#475569' }}>{pd}/{pi.length} delivered</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Projects List ─────────────────────────────────────────
+    function ProjectsListView({ projects, items, currency, onSelect, onEdit, onDelete }) {
+      const stats = useMemo(()=>projects.map(p=>{
+        const pi=items.filter(i=>i.projectId===p.id);
+        const spend=pi.reduce((s,i)=>s+i.cost,0);
+        return { ...p, spend, pct:Math.min(100,Math.round((spend/p.budget)*100)),
+          stageCounts: STAGES.reduce((a,s)=>({...a,[s]:pi.filter(i=>i.status===s).length}),{}) };
+      }),[projects,items]);
+
+      return (
+        <div style={{ display:'flex', flexDirection:'column', gap:18 }}>
+          <div style={{ fontSize:12, color:'#475569' }}>{projects.length} active project{projects.length!==1?'s':''} · {items.length} total equipment items</div>
+          {projects.length===0 && (
+            <div style={{ background:'#1E293B', border:'1px dashed #334155', borderRadius:14, padding:'50px 20px', textAlign:'center', color:'#475569', fontSize:13 }}>
+              No projects yet. Click <strong style={{ color:'#F59E0B' }}>New Project</strong> to get started.
+            </div>
+          )}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))', gap:14 }}>
+            {stats.map(p=>(
+              <div key={p.id} style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:14, overflow:'hidden' }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=p.color+'55'}
+                onMouseLeave={e=>e.currentTarget.style.borderColor='#1E3A5F'}>
+                <div style={{ height:3, background:p.color }} />
+                <div style={{ padding:'16px 16px 14px' }}>
+                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:10 }}>
+                    <div style={{ flex:1, minWidth:0, marginRight:10 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color:'#F1F5F9', marginBottom:3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</div>
+                      <div style={{ fontSize:11.5, color:'#475569' }}>{p.description||'No description'}</div>
+                    </div>
+                    <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                      <button onClick={e=>{e.stopPropagation();onEdit(p);}} style={{ background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.2)', borderRadius:6, padding:'4px 7px', color:'#60A5FA', display:'flex' }}><Pencil size={11} /></button>
+                      <button onClick={e=>{e.stopPropagation();onDelete(p.id);}} style={{ background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.2)', borderRadius:6, padding:'4px 7px', color:'#F87171', display:'flex' }}><Trash2 size={11} /></button>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom:12 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+                      <span style={{ fontSize:11, color:'#475569' }}>Budget</span>
+                      <span style={{ fontSize:11, color:'#94A3B8' }}>{fmt(p.spend,currency)} / {fmt(p.budget,currency)}</span>
+                    </div>
+                    <div style={{ height:5, background:'#0F172A', borderRadius:999 }}><div style={{ height:'100%', borderRadius:999, width:`${p.pct}%`, background:p.pct>85?'#EF4444':p.color }} /></div>
+                  </div>
+                  <div style={{ display:'flex', gap:5, marginBottom:14, flexWrap:'wrap' }}>
+                    {STAGES.map(s=>{
+                      const cnt=p.stageCounts[s]||0; const cfg=STAGE_CFG[s];
+                      return <div key={s} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:999, background:cfg.bg, border:`1px solid ${cfg.color}25` }}>
+                        <span style={{ fontSize:9.5, fontWeight:700, color:cfg.color, textTransform:'uppercase', letterSpacing:'0.4px' }}>{s}</span>
+                        <span style={{ fontSize:11.5, fontWeight:700, color:cfg.color }}>{cnt}</span>
+                      </div>;
+                    })}
+                  </div>
+                  <button onClick={()=>onSelect(p.id)} style={{ width:'100%', padding:'9px', background:`${p.color}14`, border:`1px solid ${p.color}28`, borderRadius:8, color:p.color, fontSize:12.5, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                    View Equipment <ChevronRight size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Project Kanban Detail ─────────────────────────────────
+    function ProjectDetailView({ project, items, categories, currency, onBack, onAddItem, onEditItem, onDeleteItem, onMoveItem }) {
+      const [search, setSearch] = useState('');
+      const projItems = useMemo(()=>
+        items.filter(i=>i.projectId===project.id&&(!search||i.name.toLowerCase().includes(search.toLowerCase())||i.vendor.toLowerCase().includes(search.toLowerCase()))),
+        [items,project.id,search]);
+
+      const allPi  = items.filter(i=>i.projectId===project.id);
+      const spend  = allPi.reduce((s,i)=>s+i.cost,0);
+      const pct    = Math.min(100,Math.round((spend/project.budget)*100));
+      const deliv  = allPi.filter(i=>i.status==='Delivered').length;
+
+      return (
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          <div>
+            <button onClick={onBack} style={{ background:'none', border:'none', color:'#475569', fontSize:12.5, display:'flex', alignItems:'center', gap:5, padding:'0 0 10px' }}>
+              <ChevronLeft size={13} /> All Projects
+            </button>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:10 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ width:10, height:10, borderRadius:'50%', background:project.color }} />
+                <div>
+                  <h2 style={{ margin:0, fontSize:17, fontWeight:700, color:'#F1F5F9' }}>{project.name}</h2>
+                  <div style={{ fontSize:12, color:'#475569' }}>{project.description}</div>
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ position:'relative' }}>
+                  <Search size={13} style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#475569' }} />
+                  <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search equipment…"
+                    style={{ paddingLeft:28, paddingRight:10, paddingTop:7, paddingBottom:7, background:'#1E293B', border:'1px solid #334155', borderRadius:7, color:'#E2E8F0', fontSize:12.5, width:180 }} />
+                </div>
+                <button onClick={()=>onAddItem('Creation')} style={{ background:'#F59E0B', border:'none', borderRadius:8, padding:'8px 14px', color:'#000', fontWeight:700, fontSize:12.5, display:'flex', alignItems:'center', gap:5 }}>
+                  <Plus size={13} /> Add Equipment
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+            {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(spend,currency),`${pct}% used`],['Items',allPi.length,'Total'],['Delivered',`${allPi.length?Math.round((deliv/allPi.length)*100):0}%`,`${deliv} of ${allPi.length}`]].map(([l,v,s])=>(
+              <div key={l} style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:10, padding:'12px 14px' }}>
+                <div style={{ fontSize:10, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:4 }}>{l}</div>
+                <div style={{ fontSize:20, fontWeight:700, color:'#F1F5F9', lineHeight:1 }}>{v}</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:3 }}>{s}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:10, padding:'11px 16px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+              <span style={{ fontSize:11, color:'#64748B', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.5px' }}>Budget Utilization</span>
+              <span style={{ fontSize:12, fontWeight:600, color:pct>85?'#F87171':'#94A3B8' }}>{pct}%</span>
+            </div>
+            <div style={{ height:6, background:'#0F172A', borderRadius:999 }}>
+              <div style={{ height:'100%', borderRadius:999, width:`${pct}%`, background:pct>85?'#EF4444':project.color }} />
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+            {STAGES.map((stage,si)=>{
+              const stageItems=projItems.filter(i=>i.status===stage);
+              const cfg=STAGE_CFG[stage];
+              return (
+                <div key={stage} style={{ background:'#0A1422', border:'1px solid #1E293B', borderRadius:12, display:'flex', flexDirection:'column', minHeight:280 }}>
+                  <div style={{ padding:'11px 12px 9px', borderBottom:`2px solid ${cfg.color}35`, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                      <span style={{ width:7, height:7, borderRadius:'50%', background:cfg.color }} />
+                      <span style={{ fontSize:11, fontWeight:700, color:cfg.color, textTransform:'uppercase', letterSpacing:'0.6px' }}>{stage}</span>
+                    </div>
+                    <span style={{ fontSize:11, fontWeight:700, color:cfg.color, background:cfg.bg, padding:'1px 7px', borderRadius:999 }}>{stageItems.length}</span>
+                  </div>
+
+                  <div style={{ flex:1, overflowY:'auto', padding:8 }}>
+                    {stageItems.length===0
+                      ? <div style={{ textAlign:'center', padding:'22px 8px', color:'#334155', fontSize:12, border:'1px dashed #1E3A5F', borderRadius:8, marginTop:4 }}>No items</div>
+                      : stageItems.map(item=>(
+                        <div key={item.id} style={{ background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:10, padding:'11px 11px 9px', marginBottom:8 }}>
+                          <div style={{ fontSize:12.5, fontWeight:600, color:'#E2E8F0', marginBottom:3, lineHeight:1.35 }}>{item.name}</div>
+                          <div style={{ fontSize:11, color:'#475569', marginBottom:8 }}>{item.vendor}</div>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                            <span style={{ fontSize:10.5, color:'#64748B', background:'#0F172A', padding:'2px 7px', borderRadius:5 }}>{item.category}</span>
+                            <span style={{ fontSize:12.5, fontWeight:700, color:'#E2E8F0' }}>{fmt(item.cost,currency)}</span>
+                          </div>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                            <div style={{ display:'flex', gap:4 }}>
+                              {si>0 && <button onClick={()=>onMoveItem(item.id,STAGES[si-1])} style={{ background:'rgba(148,163,184,0.08)', border:'1px solid #334155', borderRadius:5, padding:'3px 7px', color:'#64748B', display:'flex', alignItems:'center', gap:3, fontSize:10.5 }}><ArrowLeft size={10} />{STAGES[si-1]}</button>}
+                              {si<STAGES.length-1 && <button onClick={()=>onMoveItem(item.id,STAGES[si+1])} style={{ background:cfg.bg, border:`1px solid ${cfg.color}28`, borderRadius:5, padding:'3px 7px', color:cfg.color, display:'flex', alignItems:'center', gap:3, fontSize:10.5 }}>{STAGES[si+1]}<ArrowRight size={10} /></button>}
+                            </div>
+                            <div style={{ display:'flex', gap:4 }}>
+                              <button onClick={()=>onEditItem(item)} style={{ background:'rgba(96,165,250,0.1)', border:'1px solid rgba(96,165,250,0.2)', borderRadius:5, padding:'3px 6px', color:'#60A5FA', display:'flex' }}><Pencil size={10} /></button>
+                              <button onClick={()=>onDeleteItem(item.id)} style={{ background:'rgba(248,113,113,0.1)', border:'1px solid rgba(248,113,113,0.2)', borderRadius:5, padding:'3px 6px', color:'#F87171', display:'flex' }}><Trash2 size={10} /></button>
+                            </div>
+                          </div>
+                          <div style={{ paddingTop:8, borderTop:'1px solid #1E3A5F', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                            <PipelineProgress currentStage={item.status} />
+                            <span style={{ fontSize:10, color:'#475569' }}>{item.deadline}</span>
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+
+                  <div style={{ padding:'8px', borderTop:'1px solid #1E293B', flexShrink:0 }}>
+                    <button onClick={()=>onAddItem(stage)}
+                      style={{ width:'100%', padding:'6px', background:'transparent', border:'1px dashed #1E3A5F', borderRadius:7, color:'#334155', fontSize:11.5, display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=cfg.color+'60';e.currentTarget.style.color=cfg.color;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor='#1E3A5F';e.currentTarget.style.color='#334155';}}>
+                      <Plus size={11} /> Add here
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Settings ──────────────────────────────────────────────
+    function SettingsView({ currency, setCurrency, categories, onAddCategory, onRemoveCategory, onToast }) {
+      const [newCat, setNewCat] = useState('');
+      const inp  = { background:'#0F172A', border:'1px solid #334155', borderRadius:8, color:'#E2E8F0', fontSize:13.5, padding:'9px 12px' };
+      const card = { background:'#1E293B', border:'1px solid #1E3A5F', borderRadius:12, padding:'20px 22px', marginBottom:16 };
+
+      const addCat = async () => {
+        const c=newCat.trim(); if(!c||categories.includes(c)) return;
+        await onAddCategory(c); setNewCat(''); onToast(`Category "${c}" added`);
+      };
+
+      return (
+        <div style={{ maxWidth:620 }}>
+          <div style={card}>
+            <div style={{ fontSize:14, fontWeight:600, color:'#F1F5F9', marginBottom:6, display:'flex', alignItems:'center', gap:8 }}>
+              <DollarSign size={14} style={{ color:'#F59E0B' }} /> Display Currency
+            </div>
+            <p style={{ fontSize:12, color:'#475569', margin:'0 0 12px' }}>Set the global currency used across all project budgets and item costs.</p>
+            <select style={{ ...inp, width:180, cursor:'pointer' }} value={currency} onChange={e=>{setCurrency(e.target.value);onToast('Currency updated');}}>
+              {['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'].map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ ...card, marginBottom:0 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:'#F1F5F9', marginBottom:6, display:'flex', alignItems:'center', gap:8 }}>
+              <Tag size={14} style={{ color:'#34D399' }} /> Equipment Categories
+            </div>
+            <p style={{ fontSize:12, color:'#475569', margin:'0 0 14px' }}>Manage the equipment categories available when adding items to any project.</p>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:14 }}>
+              {categories.map((c,idx)=>(
+                <div key={c} style={{ display:'flex', alignItems:'center', gap:6, background:'#0F172A', border:'1px solid #334155', borderRadius:8, padding:'5px 12px' }}>
+                  <span style={{ width:7, height:7, borderRadius:'50%', background:CAT_COLORS[idx%CAT_COLORS.length], flexShrink:0 }} />
+                  <span style={{ fontSize:12.5, color:'#94A3B8' }}>{c}</span>
+                  {categories.length>2 && <button onClick={()=>{onRemoveCategory(c);onToast('Category removed','info');}} style={{ background:'none', border:'none', color:'#475569', display:'flex', marginLeft:2 }}><X size={11} /></button>}
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              <input style={{ ...inp, flex:1 }} value={newCat} placeholder="New category…" onChange={e=>setNewCat(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addCat()} />
+              <button onClick={addCat} style={{ padding:'9px 16px', background:'rgba(52,211,153,0.12)', border:'1px solid rgba(52,211,153,0.25)', borderRadius:8, color:'#34D399', fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+                <PlusCircle size={14} /> Add
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ══════════════════════════════════════════════════════════
+    //  MAIN APP
+    // ══════════════════════════════════════════════════════════
+    function App() {
+      const [projects,       setProjects]       = useState([]);
+      const [items,          setItems]          = useState([]);
+      const [categories,     setCategories]     = useState([]);
+      const [loading,        setLoading]        = useState(true);
+      const [dbError,        setDbError]        = useState(null);
+      const [activeTab,      setActiveTab]      = useState('dashboard');
+      const [selectedProjId, setSelectedProjId] = useState(null);
+      const [showItemModal,  setShowItemModal]  = useState(false);
+      const [showProjModal,  setShowProjModal]  = useState(false);
+      const [editingItem,    setEditingItem]    = useState(null);
+      const [editingProject, setEditingProject] = useState(null);
+      const [defaultStage,   setDefaultStage]   = useState('Creation');
+      const [currency,       setCurrency]       = useState('USD');
+      const [toasts,         setToasts]         = useState([]);
+
+      // Load from Supabase on mount
+      useEffect(()=>{
+        async function load() {
+          try {
+            const [{ data:p, error:pe }, { data:i, error:ie }, { data:c, error:ce }] = await Promise.all([
+              db.from('projects').select('*').order('created_at'),
+              db.from('items').select('*').order('created_at'),
+              db.from('categories').select('*').order('name'),
+            ]);
+            if (pe||ie||ce) throw pe||ie||ce;
+            setProjects(p||[]);
+            setItems((i||[]).map(toApp));
+            setCategories((c||[]).map(x=>x.name));
+          } catch(e) {
+            setDbError(e.message||'Could not connect to database.');
+          } finally { setLoading(false); }
+        }
+        load();
+      },[]);
+
+      const toast = useCallback((msg,type='success')=>{
+        const id=Date.now()+Math.random();
+        setToasts(p=>[...p,{id,message:msg,type}]);
+        setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),3500);
+      },[]);
+
+      // Project CRUD
+      const saveProject = async data => {
+        if (data.id) {
+          const { data:u } = await db.from('projects').update(data).eq('id',data.id).select().single();
+          setProjects(p=>p.map(j=>j.id===data.id?u:j)); toast('Project updated');
+        } else {
+          const { id, ...rest } = data;
+          const { data:u } = await db.from('projects').insert(rest).select().single();
+          setProjects(p=>[...p,u]); toast('Project created');
+        }
+        setShowProjModal(false); setEditingProject(null);
+      };
+      const deleteProject = async id => {
+        await db.from('projects').delete().eq('id',id);
+        setProjects(p=>p.filter(j=>j.id!==id));
+        setItems(i=>i.filter(x=>x.projectId!==id));
+        if(selectedProjId===id) setSelectedProjId(null);
+        toast('Project deleted','info');
+      };
+
+      // Item CRUD
+      const saveItem = async data => {
+        const row=toDB(data);
+        if (data.id) {
+          const { data:u } = await db.from('items').update(row).eq('id',data.id).select().single();
+          setItems(p=>p.map(i=>i.id===data.id?toApp(u):i)); toast('Equipment updated');
+        } else {
+          const { id, ...rest } = row;
+          const { data:u } = await db.from('items').insert(rest).select().single();
+          setItems(p=>[...p,toApp(u)]); toast('Equipment added');
+        }
+        setShowItemModal(false); setEditingItem(null);
+      };
+      const deleteItem = async id => {
+        await db.from('items').delete().eq('id',id);
+        setItems(p=>p.filter(i=>i.id!==id)); toast('Equipment removed','info');
+      };
+      const moveItem = async (id,status) => {
+        await db.from('items').update({status}).eq('id',id);
+        setItems(p=>p.map(i=>i.id===id?{...i,status}:i)); toast(`Moved to ${status}`);
+      };
+
+      // Category CRUD
+      const addCategory    = async name => { await db.from('categories').insert({name}); setCategories(p=>[...p,name]); };
+      const removeCategory = async name => { await db.from('categories').delete().eq('name',name); setCategories(p=>p.filter(x=>x!==name)); };
+
+      if (loading) return <Spinner />;
+      if (dbError) return (
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh', background:'#0F172A', flexDirection:'column', gap:12 }}>
+          <AlertCircle size={32} style={{ color:'#F87171' }} />
+          <div style={{ fontSize:14, color:'#F87171', fontWeight:600 }}>Database connection failed</div>
+          <div style={{ fontSize:12, color:'#475569', maxWidth:400, textAlign:'center' }}>{dbError}</div>
+          <div style={{ fontSize:11, color:'#334155', maxWidth:400, textAlign:'center', marginTop:6 }}>Open index.html and replace SUPABASE_URL and SUPABASE_ANON_KEY with your credentials.</div>
+        </div>
+      );
+
+      const selectedProject = projects.find(p=>p.id===selectedProjId);
+      const pageTitle = activeTab==='dashboard'?'Overview Dashboard':activeTab==='settings'?'Settings':selectedProject?selectedProject.name:'Projects';
+      const pageSub   = activeTab==='dashboard'?'Procurement performance across all projects':activeTab==='settings'?'Manage categories and global configuration':selectedProject?selectedProject.description:'Create and manage your procurement projects';
+      const NAV = [
+        {id:'dashboard',icon:LayoutDashboard,label:'Dashboard'},
+        {id:'projects', icon:Folder,         label:'Projects' },
+        {id:'settings', icon:Settings,       label:'Settings' },
+      ];
+
+      return (
+        <div style={{ display:'flex', height:'100vh', background:'#0F172A', color:'#E2E8F0', overflow:'hidden' }}>
+
+          {/* Sidebar */}
+          <aside style={{ width:212, minWidth:212, background:'#080F1E', borderRight:'1px solid #1E293B', display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'18px 14px', borderBottom:'1px solid #1E293B' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ width:34, height:34, borderRadius:9, background:'#F59E0B', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <Package size={16} color="#000" />
+                </div>
+                <div>
+                  <div style={{ fontSize:13.5, fontWeight:700, color:'#F1F5F9' }}>ProcureFlow</div>
+                  <div style={{ fontSize:10, color:'#334155' }}>Enterprise v2.1</div>
+                </div>
+              </div>
+            </div>
+            <nav style={{ padding:'14px 10px', flex:1, overflowY:'auto' }}>
+              <div style={{ fontSize:9.5, color:'#334155', fontWeight:700, letterSpacing:'1px', textTransform:'uppercase', padding:'0 8px', marginBottom:8 }}>Navigation</div>
+              {NAV.map(({id,icon:Icon,label})=>{
+                const active=activeTab===id;
+                return (
+                  <button key={id} onClick={()=>{setActiveTab(id);if(id!=='projects')setSelectedProjId(null);}}
+                    style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 10px', borderRadius:8, border:'none', marginBottom:2, textAlign:'left', background:active?'rgba(245,158,11,0.1)':'transparent', color:active?'#F59E0B':'#64748B' }}>
+                    <Icon size={16} />
+                    <span style={{ fontSize:13, fontWeight:active?600:400 }}>{label}</span>
+                    {active && <span style={{ marginLeft:'auto', width:5, height:5, borderRadius:'50%', background:'#F59E0B' }} />}
+                  </button>
+                );
+              })}
+              {projects.length>0 && (
+                <div style={{ marginTop:14, paddingTop:10, borderTop:'1px solid #1E293B' }}>
+                  <div style={{ fontSize:9.5, color:'#334155', fontWeight:700, letterSpacing:'1px', textTransform:'uppercase', padding:'0 8px', marginBottom:8 }}>Projects</div>
+                  {projects.map(p=>{
+                    const active=selectedProjId===p.id&&activeTab==='projects';
+                    return (
+                      <button key={p.id} onClick={()=>{setActiveTab('projects');setSelectedProjId(p.id);}}
+                        style={{ width:'100%', display:'flex', alignItems:'center', gap:8, padding:'7px 10px', borderRadius:7, border:'none', marginBottom:2, textAlign:'left', background:active?`${p.color}14`:'transparent', color:active?p.color:'#475569' }}>
+                        <span style={{ width:6, height:6, borderRadius:'50%', background:p.color, flexShrink:0 }} />
+                        <span style={{ fontSize:12, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', fontWeight:active?600:400 }}>{p.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </nav>
+            <div style={{ padding:'14px 12px', borderTop:'1px solid #1E293B' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                <div style={{ width:30, height:30, borderRadius:'50%', background:'rgba(245,158,11,0.15)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:700, color:'#F59E0B', flexShrink:0 }}>JD</div>
+                <div>
+                  <div style={{ fontSize:12.5, fontWeight:500, color:'#E2E8F0' }}>John Doe</div>
+                  <div style={{ fontSize:10.5, color:'#475569' }}>Procurement Lead</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Main */}
+          <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+            <header style={{ padding:'13px 24px', borderBottom:'1px solid #1E293B', display:'flex', alignItems:'center', justifyContent:'space-between', background:'#0A1628', flexShrink:0 }}>
+              <div>
+                <h1 style={{ margin:0, fontSize:16, fontWeight:700, color:'#F1F5F9' }}>{pageTitle}</h1>
+                <p style={{ margin:0, marginTop:2, fontSize:11.5, color:'#475569' }}>{pageSub}</p>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+                <button style={{ background:'#1E293B', border:'1px solid #334155', borderRadius:8, padding:'7px 9px', color:'#475569', display:'flex' }}><Bell size={15} /></button>
+                {activeTab==='projects'&&!selectedProjId && (
+                  <button onClick={()=>{setEditingProject(null);setShowProjModal(true);}} style={{ background:'#F59E0B', border:'none', borderRadius:8, padding:'8px 16px', color:'#000', fontWeight:700, fontSize:12.5, display:'flex', alignItems:'center', gap:6 }}>
+                    <Plus size={13} /> New Project
+                  </button>
+                )}
+                {activeTab==='projects'&&selectedProjId && (
+                  <button onClick={()=>{setDefaultStage('Creation');setEditingItem(null);setShowItemModal(true);}} style={{ background:'#F59E0B', border:'none', borderRadius:8, padding:'8px 16px', color:'#000', fontWeight:700, fontSize:12.5, display:'flex', alignItems:'center', gap:6 }}>
+                    <Plus size={13} /> Add Equipment
+                  </button>
+                )}
+              </div>
+            </header>
+            <main style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
+              {activeTab==='dashboard' && <DashboardView projects={projects} items={items} currency={currency} />}
+              {activeTab==='projects'&&!selectedProjId && <ProjectsListView projects={projects} items={items} currency={currency} onSelect={id=>setSelectedProjId(id)} onEdit={p=>{setEditingProject(p);setShowProjModal(true);}} onDelete={deleteProject} />}
+              {activeTab==='projects'&&selectedProjId&&selectedProject && <ProjectDetailView project={selectedProject} items={items} categories={categories} currency={currency} onBack={()=>setSelectedProjId(null)} onAddItem={stage=>{setDefaultStage(stage);setEditingItem(null);setShowItemModal(true);}} onEditItem={item=>{setEditingItem(item);setShowItemModal(true);}} onDeleteItem={deleteItem} onMoveItem={moveItem} />}
+              {activeTab==='settings' && <SettingsView currency={currency} setCurrency={setCurrency} categories={categories} onAddCategory={addCategory} onRemoveCategory={removeCategory} onToast={toast} />}
+            </main>
+          </div>
+
+          {/* Modals */}
+          {showProjModal && <ProjectModal project={editingProject} onSave={saveProject} onClose={()=>{setShowProjModal(false);setEditingProject(null);}} />}
+          {showItemModal && <ItemModal item={editingItem} projectId={selectedProjId} categories={categories} currency={currency} defaultStage={defaultStage} onSave={saveItem} onClose={()=>{setShowItemModal(false);setEditingItem(null);}} />}
+
+          {/* Toasts */}
+          <div style={{ position:'fixed', bottom:20, right:20, display:'flex', flexDirection:'column', gap:8, zIndex:2000 }}>
+            {toasts.map(t=><Toast key={t.id} {...t} onClose={()=>setToasts(p=>p.filter(x=>x.id!==t.id))} />)}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
