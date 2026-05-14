@@ -1431,13 +1431,35 @@ function App() {
   /* Project CRUD */
   async function saveProject(data){
     if(DEMO||!db){
-      if(data.id){setProjects(function(p){return p.map(function(j){return j.id===data.id?Object.assign({},j,data):j;});});toast('Project updated');}
-      else{setProjects(function(p){return p.concat([Object.assign({},data,{id:uid(),created_at:new Date().toISOString()})]);});toast('Project created');}
-    }else{
-      if(data.id){var r=await db.from('projects').update(data).eq('id',data.id).select().single();if(r.data)setProjects(function(p){return p.map(function(j){return j.id===data.id?r.data:j;});});toast('Project updated');}
-      else{var d=Object.assign({},data);delete d.id;var r2=await db.from('projects').insert(d).select().single();if(r2.data)setProjects(function(p){return p.concat([r2.data]);});toast('Project created');}
+      if(data.id){
+        setProjects(function(p){return p.map(function(j){return j.id===data.id?Object.assign({},j,data):j;});});
+        toast('Project updated');
+      } else {
+        setProjects(function(p){return p.concat([Object.assign({},data,{id:uid(),created_at:new Date().toISOString()})]);});
+        toast('Project created');
+      }
+    } else {
+      /* Strip fields Supabase won't allow in update/insert payload */
+      var payload = {
+        name:        data.name,
+        description: data.description,
+        budget:      data.budget,
+        color:       data.color,
+        currency:    data.currency || 'USD',
+      };
+      if(data.id){
+        var r = await db.from('projects').update(payload).eq('id',data.id).select().single();
+        if(r.error) { toast('Save failed: '+r.error.message,'error'); return; }
+        setProjects(function(p){return p.map(function(j){return j.id===data.id?r.data:j;});});
+        toast('Project updated');
+      } else {
+        var r2 = await db.from('projects').insert(payload).select().single();
+        if(r2.error) { toast('Save failed: '+r2.error.message,'error'); return; }
+        setProjects(function(p){return p.concat([r2.data]);});
+        toast('Project created');
+      }
     }
-    setShowProj(false);setEditProj(null);
+    setShowProj(false); setEditProj(null);
   }
   async function deleteProject(id){
     if(!DEMO&&db)await db.from('projects').delete().eq('id',id);
