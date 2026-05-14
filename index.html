@@ -62,21 +62,21 @@ var ROLES = ['Admin','Manager','Member','Viewer'];
 
 /* ── Demo data ──────────────────────────────────────────────── */
 var DEMO_PROJECTS = [
-  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',     budget:120000, color:'#3B82F6', created_at:'2026-01-15'},
-  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',           budget:80000,  color:'#F59E0B', created_at:'2026-02-01'},
-  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure', budget:250000, color:'#A78BFA', created_at:'2026-03-10'},
+  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, color:'#3B82F6', currency:'USD', created_at:'2026-01-15'},
+  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  color:'#F59E0B', currency:'SGD', created_at:'2026-02-01'},
+  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, color:'#A78BFA', currency:'USD', created_at:'2026-03-10'},
 ];
 var DEMO_ITEMS = [
-  {id:'i1', projectId:'p1', name:'Dell XPS Workstations (x10)',   category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    cost:28000, deadline:'2026-06-15'},
-  {id:'i2', projectId:'p1', name:'Adobe Creative Suite Licenses', category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',cost:5400,  deadline:'2026-05-30'},
-  {id:'i3', projectId:'p1', name:'Cloud Infrastructure (AWS)',    category:'Software',  vendor:'Amazon Web Services', status:'Delivered',cost:12000, deadline:'2026-05-01'},
-  {id:'i4', projectId:'p1', name:'Cisco Network Equipment',       category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', cost:22000, deadline:'2026-08-01'},
-  {id:'i5', projectId:'p2', name:'Office Furniture Package',      category:'Facilities',vendor:'Herman Miller',       status:'Order',    cost:8500,  deadline:'2026-07-01'},
-  {id:'i6', projectId:'p2', name:'Conference AV System',          category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', cost:15000, deadline:'2026-06-20'},
-  {id:'i7', projectId:'p2', name:'Ergonomic Chairs (x20)',        category:'Facilities',vendor:'Steelcase',           status:'Received', cost:9600,  deadline:'2026-05-15'},
-  {id:'i8', projectId:'p3', name:'Server Rack Systems (x4)',      category:'Hardware',  vendor:'Supermicro',          status:'Order',    cost:45000, deadline:'2026-07-15'},
-  {id:'i9', projectId:'p3', name:'Cooling Infrastructure',        category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', cost:38000, deadline:'2026-08-01'},
-  {id:'i10',projectId:'p3', name:'UPS Power Systems',             category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', cost:22000, deadline:'2026-08-15'},
+  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10'},
+  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27'},
+  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24'},
+  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16'},
+  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01'},
+  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10'},
+  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18'},
+  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20'},
+  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07'},
+  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16'},
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_USERS = [
@@ -106,6 +106,23 @@ function shortDate(ts) {
   var d = new Date(ts);
   return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
 }
+function calcOrderBy(deliveryDate, leadDays) {
+  if (!deliveryDate || !leadDays || isNaN(+leadDays)) return '';
+  var d = new Date(deliveryDate);
+  if (isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() - Math.max(0, +leadDays));
+  return d.toISOString().split('T')[0];
+}
+function urgencyLabel(dateStr) {
+  if (!dateStr) return {color:'#475569', label:'—'};
+  var diff = (new Date(dateStr) - new Date()) / 86400000;
+  if (diff < 0)  return {color:'#F87171', label:'OVERDUE'};
+  if (diff < 7)  return {color:'#EF4444', label:'THIS WEEK'};
+  if (diff < 14) return {color:'#F59E0B', label:'URGENT'};
+  if (diff < 30) return {color:'#FBBF24', label:'SOON'};
+  return {color:'#34D399', label:'ON TRACK'};
+}
+var CURRENCIES = ['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'];
 
 /* ── SVG icon paths ─────────────────────────────────────────── */
 var SVGP = {
@@ -766,7 +783,7 @@ function TeamView(props) {
 /* ── Project Modal ──────────────────────────────────────────── */
 function ProjectModal(props) {
   var project=props.project,onSave=props.onSave,onClose=props.onClose;
-  var _f=useState(project||{name:'',description:'',budget:'',color:PC[0]});
+  var _f=useState(project||{name:'',description:'',budget:'',color:PC[0],currency:'USD'});
   var form=_f[0],setForm=_f[1];
   var _e=useState(''),error=_e[0],setError=_e[1];
   var _s=useState(false),saving=_s[0],setSaving=_s[1];
@@ -785,11 +802,26 @@ function ProjectModal(props) {
     </button>
   </div>);
   return (
-    <Modal title={project?'Edit Project':'Create New Project'} onClose={onClose} w={460} footer={footer}>
+    <Modal title={project?'Edit Project':'Create New Project'} onClose={onClose} w={480} footer={footer}>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
         <div><label style={LBL}>Project Name *</label><input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);}} placeholder="e.g. IT Infrastructure Upgrade"/></div>
         <div><label style={LBL}>Description</label><input style={INP} value={form.description} onChange={function(e){set('description',e.target.value);}} placeholder="Brief description…"/></div>
-        <div><label style={LBL}>Budget (USD) *</label><input style={INP} type="number" min="0" value={form.budget} onChange={function(e){set('budget',e.target.value);}} placeholder="0"/></div>
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:14}}>
+          <div>
+            <label style={LBL}>Project Budget *</label>
+            <input style={INP} type="number" min="0" value={form.budget} onChange={function(e){set('budget',e.target.value);}} placeholder="0"/>
+          </div>
+          <div>
+            <label style={LBL}>Currency</label>
+            <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.currency||'USD'} onChange={function(e){set('currency',e.target.value);}}>
+              {CURRENCIES.map(function(c){return <option key={c} value={c}>{c}</option>;})}
+            </select>
+          </div>
+        </div>
+        <div style={{padding:'11px 14px',background:'#0F172A',borderRadius:8,border:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:12,color:'#475569'}}>Budget preview</span>
+          <span style={{fontSize:16,fontWeight:700,color:'#F1F5F9'}}>{form.budget&&!isNaN(+form.budget)?fmt(+form.budget,form.currency||'USD'):'—'}</span>
+        </div>
         <div><label style={LBL}>Project Colour</label>
           <div style={{display:'flex',gap:9}}>{PC.map(function(c){return <button key={c} onClick={function(){set('color',c);}} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>;})}</div>
         </div>
@@ -803,36 +835,151 @@ function ProjectModal(props) {
 function ItemModal(props) {
   var item=props.item,projectId=props.projectId,categories=props.categories;
   var currency=props.currency,defStage=props.defStage,onSave=props.onSave,onClose=props.onClose;
-  var initF=item||{name:'',category:categories[0]||'Hardware',vendor:'',status:defStage||'Creation',cost:'',deadline:''};
-  var _f=useState(initF),form=_f[0],setForm=_f[1];
+  var def=item||{name:'',category:categories[0]||'Hardware',vendor:'',status:defStage||'Creation',
+    qty:'1',unit_cost:'',delivery_date:'',lead_time_days:'',order_by_date:''};
+  var _f=useState(def),form=_f[0],setForm=_f[1];
   var _e=useState(''),error=_e[0],setError=_e[1];
   var _s=useState(false),saving=_s[0],setSaving=_s[1];
-  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
-  async function submit(){
-    if(!form.name.trim())return setError('Item name is required.');
-    if(!form.vendor.trim())return setError('Vendor is required.');
-    if(!form.cost||isNaN(+form.cost)||+form.cost<=0)return setError('Valid cost is required.');
-    if(!form.deadline)return setError('Deadline is required.');
+
+  function set(k,v) {
+    setForm(function(f) {
+      var next = Object.assign({},f,{[k]:v});
+      /* Recompute total cost whenever qty or unit_cost changes */
+      if(k==='qty'||k==='unit_cost') {
+        var q=+(k==='qty'?v:next.qty)||0, uc=+(k==='unit_cost'?v:next.unit_cost)||0;
+        next.total_cost = q*uc;
+      }
+      /* Recompute order_by_date whenever delivery_date or lead_time changes */
+      if(k==='delivery_date'||k==='lead_time_days') {
+        next.order_by_date = calcOrderBy(
+          k==='delivery_date'?v:next.delivery_date,
+          k==='lead_time_days'?v:next.lead_time_days
+        );
+      }
+      return next;
+    });
+  }
+
+  /* Initialise derived fields when editing existing item */
+  var totalCost = form.total_cost !== undefined ? form.total_cost : ((+form.qty||1)*(+form.unit_cost||0));
+  var orderBy   = form.order_by_date || calcOrderBy(form.delivery_date, form.lead_time_days);
+  var urgency   = urgencyLabel(orderBy);
+
+  async function submit() {
+    if(!form.name.trim())       return setError('Item name is required.');
+    if(!form.vendor.trim())     return setError('Vendor is required.');
+    if(!form.unit_cost||isNaN(+form.unit_cost)||+form.unit_cost<=0) return setError('Unit cost must be a positive number.');
+    if(!form.qty||isNaN(+form.qty)||+form.qty<1) return setError('Quantity must be at least 1.');
+    if(!form.delivery_date)     return setError('Delivery date is required.');
+    if(!form.lead_time_days||isNaN(+form.lead_time_days)||+form.lead_time_days<0) return setError('Lead time (days) is required.');
     setError('');setSaving(true);
-    await onSave(Object.assign({},form,{cost:+form.cost,id:item&&item.id,projectId:item?item.projectId:projectId}));
+    var qty=Math.round(+form.qty), uc=+form.unit_cost;
+    await onSave(Object.assign({},form,{
+      qty:qty, unit_cost:uc, cost:qty*uc,
+      lead_time_days:+form.lead_time_days,
+      order_by_date: calcOrderBy(form.delivery_date,form.lead_time_days),
+      deadline: form.delivery_date,  /* keep legacy field in sync */
+      id:item&&item.id, projectId:item?item.projectId:projectId
+    }));
     setSaving(false);
   }
+
+  var CUR=currency||'USD';
   var footer=(<div style={{display:'flex',gap:9}}>
     <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
     <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
       <Ico n="save" size={13}/>{saving?'Saving…':(item?'Save Changes':'Add Equipment')}
     </button>
   </div>);
+
   return (
-    <Modal title={item?'Edit Equipment':'Add Equipment'} onClose={onClose} footer={footer}>
+    <Modal title={item?'Edit Equipment':'Add Equipment'} onClose={onClose} w={560} footer={footer}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Equipment / Item Name *</label><input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);}} placeholder="e.g. Dell XPS Workstations (x10)"/></div>
-        <div><label style={LBL}>Category</label><select style={Object.assign({},INP,{cursor:'pointer'})} value={form.category} onChange={function(e){set('category',e.target.value);}}>{categories.map(function(c){return <option key={c} value={c}>{c}</option>;})}</select></div>
-        <div><label style={LBL}>Pipeline Stage</label><select style={Object.assign({},INP,{cursor:'pointer'})} value={form.status} onChange={function(e){set('status',e.target.value);}}>{STAGES.map(function(s){return <option key={s} value={s}>{s}</option>;})}</select></div>
-        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Vendor *</label><input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value);}} placeholder="e.g. Dell Technologies"/></div>
-        <div><label style={LBL}>Cost ({currency||'USD'}) *</label><input style={INP} type="number" min="0" value={form.cost} onChange={function(e){set('cost',e.target.value);}} placeholder="0"/></div>
-        <div><label style={LBL}>Deadline *</label><input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.deadline} onChange={function(e){set('deadline',e.target.value);}}/></div>
-        {error&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:7,fontSize:12.5,color:'#F87171'}}><Ico n="alert" size={13}/>{error}</div>}
+
+        {/* Row 1 — Name */}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Equipment / Item Name *</label>
+          <input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);}} placeholder="e.g. Dell XPS Workstations"/>
+        </div>
+
+        {/* Row 2 — Category + Stage */}
+        <div>
+          <label style={LBL}>Category</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.category} onChange={function(e){set('category',e.target.value);}}>
+            {categories.map(function(c){return <option key={c} value={c}>{c}</option>;})}
+          </select>
+        </div>
+        <div>
+          <label style={LBL}>Pipeline Stage</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.status} onChange={function(e){set('status',e.target.value);}}>
+            {STAGES.map(function(s){return <option key={s} value={s}>{s}</option>;})}
+          </select>
+        </div>
+
+        {/* Row 3 — Vendor */}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Vendor *</label>
+          <input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value);}} placeholder="e.g. Dell Technologies"/>
+        </div>
+
+        {/* Row 4 — Qty + Unit cost */}
+        <div>
+          <label style={LBL}>Quantity *</label>
+          <input style={INP} type="number" min="1" step="1" value={form.qty} onChange={function(e){set('qty',e.target.value);}} placeholder="1"/>
+        </div>
+        <div>
+          <label style={LBL}>Unit Cost ({CUR}) *</label>
+          <input style={INP} type="number" min="0" step="0.01" value={form.unit_cost} onChange={function(e){set('unit_cost',e.target.value);}} placeholder="0.00"/>
+        </div>
+
+        {/* Row 5 — Total cost (computed, read-only) */}
+        <div style={{gridColumn:'1/-1'}}>
+          <div style={{padding:'12px 14px',background:'#0F172A',borderRadius:8,border:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{fontSize:12,color:'#475569'}}>
+              Total Cost
+              {form.qty&&form.unit_cost ? (
+                <span style={{color:'#334155',marginLeft:8}}>{form.qty} × {fmt(+form.unit_cost||0,CUR)}</span>
+              ) : null}
+            </div>
+            <span style={{fontSize:18,fontWeight:700,color:'#F1F5F9'}}>{fmt(totalCost,CUR)}</span>
+          </div>
+        </div>
+
+        {/* Row 6 — Delivery date + Lead time */}
+        <div>
+          <label style={LBL}>Delivery Date *</label>
+          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date"
+            value={form.delivery_date} onChange={function(e){set('delivery_date',e.target.value);}}/>
+        </div>
+        <div>
+          <label style={LBL}>Lead Time (days) *</label>
+          <input style={INP} type="number" min="0" step="1" value={form.lead_time_days}
+            onChange={function(e){set('lead_time_days',e.target.value);}} placeholder="e.g. 14"/>
+        </div>
+
+        {/* Row 7 — Order by date (auto-computed) */}
+        <div style={{gridColumn:'1/-1'}}>
+          <div style={{padding:'12px 14px',background:'#0F172A',borderRadius:8,border:'1px solid '+(orderBy?urgency.color+'40':'#334155'),display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div>
+              <div style={{fontSize:11,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:3}}>
+                Order By Date <span style={{color:'#334155',fontWeight:400,textTransform:'none',letterSpacing:0}}>(auto-calculated: Delivery − Lead time)</span>
+              </div>
+              <div style={{fontSize:16,fontWeight:700,color:orderBy?urgency.color:'#334155'}}>
+                {orderBy || '— fill Delivery Date and Lead Time above —'}
+              </div>
+            </div>
+            {orderBy && (
+              <span style={{fontSize:10,fontWeight:700,color:urgency.color,background:urgency.color+'15',padding:'3px 9px',borderRadius:999,border:'1px solid '+urgency.color+'30',whiteSpace:'nowrap'}}>
+                {urgency.label}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Error */}
+        {error&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:7,fontSize:12.5,color:'#F87171'}}>
+          <Ico n="alert" size={13}/>{error}
+        </div>}
       </div>
     </Modal>
   );
@@ -1023,14 +1170,48 @@ function Kanban(props) {
             </div>
             <div style={{flex:1,overflowY:'auto',padding:8}}>
               {!col.length&&<div style={{textAlign:'center',padding:'22px 8px',color:'#334155',fontSize:12,border:'1px dashed #1E3A5F',borderRadius:8,marginTop:4}}>No items</div>}
-              {col.map(function(item){return(
-                <div key={item.id} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'11px 11px 9px',marginBottom:8}}>
-                  <div style={{fontSize:12.5,fontWeight:600,color:'#E2E8F0',marginBottom:3,lineHeight:1.35}}>{item.name}</div>
+              {col.map(function(item){
+                var orderBy   = item.order_by_date || calcOrderBy(item.delivery_date||item.deadline, item.lead_time_days);
+                var urgency   = urgencyLabel(orderBy);
+                var totalCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
+                return(
+                <div key={item.id} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
+                  {/* Name */}
+                  <div style={{fontSize:12.5,fontWeight:600,color:'#E2E8F0',marginBottom:2,lineHeight:1.35}}>{item.name}</div>
                   <div style={{fontSize:11,color:'#475569',marginBottom:8}}>{item.vendor}</div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                    <span style={{fontSize:10.5,color:'#64748B',background:'#0F172A',padding:'2px 7px',borderRadius:5}}>{item.category}</span>
-                    <span style={{fontSize:12.5,fontWeight:700,color:'#E2E8F0'}}>{fmt(item.cost,currency)}</span>
+
+                  {/* Cost breakdown */}
+                  <div style={{background:'#0F172A',borderRadius:6,padding:'7px 9px',marginBottom:8}}>
+                    {item.qty>1 ? (
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:10.5,color:'#475569'}}>{item.qty} × {fmt(item.unit_cost||0,currency)}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'#E2E8F0'}}>{fmt(totalCost,currency)}</span>
+                      </div>
+                    ) : (
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:10.5,color:'#475569'}}>{item.category}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'#E2E8F0'}}>{fmt(totalCost,currency)}</span>
+                      </div>
+                    )}
+                    {item.qty>1&&<div style={{fontSize:10,color:'#334155',marginTop:2}}>{item.category}</div>}
                   </div>
+
+                  {/* Dates block */}
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5,marginBottom:8}}>
+                    {/* Order by */}
+                    <div style={{background:urgency.color+'10',borderRadius:6,padding:'5px 8px',border:'1px solid '+urgency.color+'25'}}>
+                      <div style={{fontSize:9,color:urgency.color,fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',marginBottom:2}}>Order By</div>
+                      <div style={{fontSize:11.5,fontWeight:600,color:urgency.color}}>{orderBy||'—'}</div>
+                    </div>
+                    {/* Delivery */}
+                    <div style={{background:'rgba(96,165,250,.06)',borderRadius:6,padding:'5px 8px',border:'1px solid rgba(96,165,250,.15)'}}>
+                      <div style={{fontSize:9,color:'#60A5FA',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',marginBottom:2}}>Delivery</div>
+                      <div style={{fontSize:11.5,fontWeight:600,color:'#94A3B8'}}>{item.delivery_date||item.deadline||'—'}</div>
+                    </div>
+                  </div>
+                  {item.lead_time_days&&<div style={{fontSize:10.5,color:'#334155',marginBottom:8}}>Lead time: {item.lead_time_days} day{item.lead_time_days!==1?'s':''}</div>}
+
+                  {/* Stage move + Edit/Delete */}
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                     <div style={{display:'flex',gap:4}}>
                       {si>0&&<button onClick={function(){onMove(item.id,STAGES[si-1]);}} style={{background:'rgba(148,163,184,.08)',border:'1px solid #334155',borderRadius:5,padding:'3px 7px',color:'#64748B',display:'flex',alignItems:'center',gap:3,fontSize:10.5}}><Ico n="arrl" size={10}/>{STAGES[si-1]}</button>}
@@ -1041,10 +1222,8 @@ function Kanban(props) {
                       <button onClick={function(){onDelete(item.id);}} style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'3px 6px',color:'#F87171',display:'flex'}}><Ico n="trash" size={10}/></button>
                     </div>
                   </div>
-                  <div style={{paddingTop:8,borderTop:'1px solid #1E3A5F',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <PipeDots stage={item.status}/>
-                    <span style={{fontSize:10,color:'#475569'}}>{item.deadline}</span>
-                  </div>
+                  {/* Pipeline dots */}
+                  <div style={{paddingTop:7,borderTop:'1px solid #1E3A5F'}}><PipeDots stage={item.status}/></div>
                 </div>
               );})}
             </div>
@@ -1179,6 +1358,7 @@ function App() {
 
   /* Item CRUD */
   async function saveItem(data){
+    /* data already has: qty, unit_cost, cost (total), delivery_date, lead_time_days, order_by_date */
     if(DEMO||!db){
       if(data.id){setItems(function(p){return p.map(function(i){return i.id===data.id?Object.assign({},i,data):i;});});toast('Equipment updated');}
       else{setItems(function(p){return p.concat([Object.assign({},data,{id:uid()})]);});toast('Equipment added');}
@@ -1339,7 +1519,7 @@ function App() {
           {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'#475569',fontSize:13}}><div style={{width:20,height:20,border:'2px solid #1E293B',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading data…</div>}
           {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
           {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
-          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
+          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
           {tab==='team'&&<TeamView users={users} currentUser={user}
             onAdd={function(){setShowAddUser(true);}}
             onUpdate={updateUser} onDelete={deleteUser}
@@ -1349,7 +1529,7 @@ function App() {
       </div>
 
       {showProj&&<ProjectModal project={editProj} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
-      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currency={currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
+      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currency={selProj?selProj.currency||currency:currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
       {showAddUser&&<AddUserModal onSave={async function(form){await addUser(form);setShowAddUser(false);}} onClose={function(){setShowAddUser(false);}}/>}
       <div style={{position:'fixed',bottom:20,right:20,display:'flex',flexDirection:'column',gap:8,zIndex:2000}}>
         {toasts.map(function(t){return <Toast key={t.id} message={t.message} type={t.type} onClose={function(){setToasts(function(p){return p.filter(function(x){return x.id!==t.id;});});}}/>;} )}
