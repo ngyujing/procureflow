@@ -11,16 +11,55 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
-body{background:#0F172A;color:#E2E8F0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden}
+body{background:var(--c-bg);color:var(--c-text2);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;overflow:hidden}
 input,select,button,textarea{font-family:inherit;outline:none}
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+::-webkit-scrollbar-thumb{background:var(--c-border2);border-radius:4px}
 @keyframes toast-in{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 input:focus,select:focus{border-color:#F59E0B!important;box-shadow:0 0 0 3px rgba(245,158,11,.15)!important}
-option{background:#1E293B;color:#E2E8F0}
+option{background:var(--c-surface);color:var(--c-text2)}
 button{cursor:pointer}
+/* ── Dark theme (default) ── */
+html,[data-theme="dark"]{
+  --c-bg:         #0F172A;
+  --c-surface:    #1E293B;
+  --c-header:     #0A1628;
+  --c-sidebar:    #080F1E;
+  --c-kanban:     #0A1422;
+  --c-border:     #1E3A5F;
+  --c-border2:    #334155;
+  --c-input:      #0F172A;
+  --c-text1:      #F1F5F9;
+  --c-text2:      #E2E8F0;
+  --c-text3:      #94A3B8;
+  --c-text4:      #64748B;
+  --c-text5:      #475569;
+  --c-ghost:      #334155;
+  --c-swatch-sel: #F1F5F9;
+}
+/* ── Light theme ── */
+[data-theme="light"]{
+  --c-bg:         #F1F5F9;
+  --c-surface:    #FFFFFF;
+  --c-header:     #FFFFFF;
+  --c-sidebar:    #F8FAFC;
+  --c-kanban:     #EFF2F7;
+  --c-border:     #E2E8F0;
+  --c-border2:    #CBD5E1;
+  --c-input:      #F8FAFC;
+  --c-text1:      #0F172A;
+  --c-text2:      #1E293B;
+  --c-text3:      #64748B;
+  --c-text4:      #64748B;
+  --c-text5:      #94A3B8;
+  --c-ghost:      #94A3B8;
+  --c-swatch-sel: #0F172A;
+}
+/* Smooth transitions */
+*{transition:background-color .18s ease,border-color .18s ease,color .05s ease}
+button,input,select{transition:none!important}
 </style>
 </head>
 <body>
@@ -51,7 +90,7 @@ if (!DEMO) {
 /* ── Constants ──────────────────────────────────────────────── */
 var STAGES = ['Creation','Order','Received','Delivered'];
 var SC = {
-  Creation : {color:'#94A3B8', bg:'rgba(148,163,184,.12)'},
+  Creation : {color:'var(--c-text3)', bg:'rgba(148,163,184,.12)'},
   Order    : {color:'#60A5FA', bg:'rgba(96,165,250,.12)'},
   Received : {color:'#FBBF24', bg:'rgba(251,191,36,.12)'},
   Delivered: {color:'#34D399', bg:'rgba(52,211,153,.12)'},
@@ -114,7 +153,7 @@ function calcOrderBy(deliveryDate, leadDays) {
   return d.toISOString().split('T')[0];
 }
 function urgencyLabel(dateStr) {
-  if (!dateStr) return {color:'#475569', label:'—'};
+  if (!dateStr) return {color:'var(--c-text5)', label:'—'};
   var diff = (new Date(dateStr) - new Date()) / 86400000;
   if (diff < 0)  return {color:'#F87171', label:'OVERDUE'};
   if (diff < 7)  return {color:'#EF4444', label:'THIS WEEK'};
@@ -158,6 +197,8 @@ var SVGP = {
   crown:     '<path d="M2 20h20"/><path d="M5 20V10l7-7 7 7v10"/>',
   refresh:   '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   copy:      '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  sun:       '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+  moon:      '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
 };
 
 function Ico(props) {
@@ -174,7 +215,7 @@ function Ico(props) {
 /* ── Bar chart ──────────────────────────────────────────────── */
 function BarChart(props) {
   var data = props.data, h = props.height || 200, currency = props.currency;
-  if (!data || !data.length) return <div style={{height:h,display:'flex',alignItems:'center',justifyContent:'center',color:'#334155',fontSize:12}}>No data yet</div>;
+  if (!data || !data.length) return <div style={{height:h,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-ghost)',fontSize:12}}>No data yet</div>;
   var maxV = 1;
   for (var k=0;k<data.length;k++) if(data[k].spend>maxV) maxV=data[k].spend;
   var PL=44,PR=8,PT=10,PB=40,VW=380,VH=h;
@@ -183,12 +224,12 @@ function BarChart(props) {
   var gap=(cW-data.length*bW)/(data.length+1);
   var gridEls=[0,.5,1].map(function(f){
     var y=PT+cH-f*cH, v=f*maxV;
-    return <g key={'g'+f}><line x1={PL} y1={y} x2={VW-PR} y2={y} stroke="#1E293B" strokeWidth="1"/><text x={PL-4} y={y+4} textAnchor="end" fill="#475569" fontSize="9">{v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v.toFixed(0)}</text></g>;
+    return <g key={'g'+f}><line x1={PL} y1={y} x2={VW-PR} y2={y} stroke="#1E293B" strokeWidth="1"/><text x={PL-4} y={y+4} textAnchor="end" fill="var(--c-text5)" fontSize="9">{v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+v.toFixed(0)}</text></g>;
   });
   var barEls=data.map(function(d,i){
     var bH=Math.max(3,(d.spend/maxV)*cH), x=PL+gap+i*(bW+gap), y=PT+cH-bH;
     var lbl=d.name.length>9?d.name.slice(0,8)+'…':d.name;
-    return <g key={'b'+i}><rect x={x} y={y} width={bW} height={bH} fill={d.color} rx="3" opacity="0.85"/><text x={x+bW/2} y={VH-PB+14} textAnchor="middle" fill="#475569" fontSize="9.5">{lbl}</text></g>;
+    return <g key={'b'+i}><rect x={x} y={y} width={bW} height={bH} fill={d.color} rx="3" opacity="0.85"/><text x={x+bW/2} y={VH-PB+14} textAnchor="middle" fill="var(--c-text5)" fontSize="9.5">{lbl}</text></g>;
   });
   return <svg viewBox={'0 0 '+VW+' '+VH} style={{width:'100%',height:h}}>{gridEls}{barEls}</svg>;
 }
@@ -198,8 +239,8 @@ function PipeDots(props) {
   var stage=props.stage, idx=STAGES.indexOf(stage), els=[];
   for(var i=0;i<STAGES.length;i++){
     var s=STAGES[i],done=i<idx,act=i===idx,cfg=SC[s];
-    els.push(<div key={'d'+i} style={{width:8,height:8,borderRadius:'50%',flexShrink:0,background:(act||done)?cfg.color:'#334155',opacity:done?.5:act?1:.3,border:act?'2px solid '+cfg.color:'none'}}/>);
-    if(i<STAGES.length-1) els.push(<div key={'l'+i} style={{width:12,height:2,background:done?SC[STAGES[i+1]].color:'#334155',opacity:done?.45:.2}}/>);
+    els.push(<div key={'d'+i} style={{width:8,height:8,borderRadius:'50%',flexShrink:0,background:(act||done)?cfg.color:'var(--c-ghost)',opacity:done?.5:act?1:.3,border:act?'2px solid '+cfg.color:'none'}}/>);
+    if(i<STAGES.length-1) els.push(<div key={'l'+i} style={{width:12,height:2,background:done?SC[STAGES[i+1]].color:'var(--c-ghost)',opacity:done?.45:.2}}/>);
   }
   return <div style={{display:'flex',alignItems:'center'}}>{els}</div>;
 }
@@ -208,10 +249,10 @@ function PipeDots(props) {
 function Toast(props) {
   var c={success:'#34D399',error:'#F87171',info:'#60A5FA',warning:'#FBBF24'}[props.type]||'#34D399';
   return (
-    <div style={{background:'#1E293B',border:'1px solid '+c+'40',borderLeft:'3px solid '+c,borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,minWidth:260,animation:'toast-in .2s ease',boxShadow:'0 4px 20px rgba(0,0,0,.4)'}}>
+    <div style={{background:'var(--c-surface)',border:'1px solid '+c+'40',borderLeft:'3px solid '+c,borderRadius:8,padding:'10px 14px',display:'flex',alignItems:'center',gap:10,minWidth:260,animation:'toast-in .2s ease',boxShadow:'0 4px 20px rgba(0,0,0,.4)'}}>
       <Ico n="check" size={14} color={c}/>
-      <span style={{fontSize:13,color:'#E2E8F0',flex:1}}>{props.message}</span>
-      <button onClick={props.onClose} style={{background:'none',border:'none',color:'#475569',display:'flex',padding:2}}><Ico n="x" size={13}/></button>
+      <span style={{fontSize:13,color:'var(--c-text2)',flex:1}}>{props.message}</span>
+      <button onClick={props.onClose} style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:2}}><Ico n="x" size={13}/></button>
     </div>
   );
 }
@@ -220,27 +261,27 @@ function Toast(props) {
 function Modal(props) {
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-      <div style={{background:'#1E293B',borderRadius:14,border:'1px solid #334155',width:props.w||500,maxWidth:'100%',maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
-        <div style={{padding:'16px 20px',borderBottom:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-          <h3 style={{margin:0,fontSize:14.5,fontWeight:700,color:'#F1F5F9'}}>{props.title}</h3>
-          <button onClick={props.onClose} style={{background:'none',border:'none',color:'#475569',display:'flex',padding:4}}><Ico n="x" size={16}/></button>
+      <div style={{background:'var(--c-surface)',borderRadius:14,border:'1px solid var(--c-border2)',width:props.w||500,maxWidth:'100%',maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'16px 20px',borderBottom:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+          <h3 style={{margin:0,fontSize:14.5,fontWeight:700,color:'var(--c-text1)'}}>{props.title}</h3>
+          <button onClick={props.onClose} style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:4}}><Ico n="x" size={16}/></button>
         </div>
         <div style={{padding:'18px 20px',overflowY:'auto',flex:1}}>{props.children}</div>
-        {props.footer&&<div style={{padding:'13px 20px',borderTop:'1px solid #334155',display:'flex',justifyContent:'flex-end',gap:9,flexShrink:0}}>{props.footer}</div>}
+        {props.footer&&<div style={{padding:'13px 20px',borderTop:'1px solid var(--c-border2)',display:'flex',justifyContent:'flex-end',gap:9,flexShrink:0}}>{props.footer}</div>}
       </div>
     </div>
   );
 }
 
-var INP={width:'100%',background:'#0F172A',border:'1px solid #334155',borderRadius:8,padding:'9px 12px',color:'#E2E8F0',fontSize:13.5};
-var LBL={fontSize:11.5,color:'#64748B',fontWeight:500,marginBottom:5,display:'block'};
+var INP={width:'100%',background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'9px 12px',color:'var(--c-text2)',fontSize:13.5};
+var LBL={fontSize:11.5,color:'var(--c-text4)',fontWeight:500,marginBottom:5,display:'block'};
 
 /* ── Role badge ─────────────────────────────────────────────── */
 var ROLE_CFG = {
   Admin:   {color:'#F59E0B', bg:'rgba(245,158,11,.12)'},
   Manager: {color:'#60A5FA', bg:'rgba(96,165,250,.12)'},
   Member:  {color:'#34D399', bg:'rgba(52,211,153,.12)'},
-  Viewer:  {color:'#94A3B8', bg:'rgba(148,163,184,.12)'},
+  Viewer:  {color:'var(--c-text3)', bg:'rgba(148,163,184,.12)'},
 };
 function RoleBadge(props) {
   var cfg = ROLE_CFG[props.role] || ROLE_CFG.Member;
@@ -254,6 +295,7 @@ function RoleBadge(props) {
 
 /* ── Login page ─────────────────────────────────────────────── */
 function LoginPage(props) {
+  var onLogin=props.onLogin, theme=props.theme, onToggleTheme=props.onToggleTheme;
   var _m=useState('login'),mode=_m[0],setMode=_m[1];
   var _e=useState(''),email=_e[0],setEmail=_e[1];
   var _p=useState(''),pass=_p[0],setPass=_p[1];
@@ -280,7 +322,13 @@ function LoginPage(props) {
   }
 
   return (
-    <div style={{height:'100vh',background:'#0F172A',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{height:'100vh',background:'var(--c-bg)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      {/* Theme toggle — top right */}
+      <button onClick={onToggleTheme} title="Toggle theme"
+        style={{position:'absolute',top:16,right:16,background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 11px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:6,fontSize:12,zIndex:10}}>
+        <Ico n={theme==='dark'?'sun':'moon'} size={14}/>
+        {theme==='dark'?'Light':'Dark'}
+      </button>
       <div style={{position:'absolute',inset:0,overflow:'hidden',pointerEvents:'none'}}>
         <div style={{position:'absolute',top:'-20%',left:'-10%',width:'40%',height:'60%',background:'radial-gradient(circle,rgba(59,130,246,.08) 0%,transparent 70%)'}}/>
         <div style={{position:'absolute',bottom:'-10%',right:'-5%',width:'35%',height:'50%',background:'radial-gradient(circle,rgba(167,139,250,.06) 0%,transparent 70%)'}}/>
@@ -291,14 +339,14 @@ function LoginPage(props) {
             <Ico n="package" size={22} color="#000"/>
           </div>
           <div>
-            <div style={{fontSize:22,fontWeight:800,color:'#F1F5F9',letterSpacing:'-0.5px'}}>ProcureFlow</div>
-            <div style={{fontSize:11,color:'#475569',letterSpacing:'1px',textTransform:'uppercase'}}>Enterprise Platform</div>
+            <div style={{fontSize:22,fontWeight:800,color:'var(--c-text1)',letterSpacing:'-0.5px'}}>ProcureFlow</div>
+            <div style={{fontSize:11,color:'var(--c-text5)',letterSpacing:'1px',textTransform:'uppercase'}}>Enterprise Platform</div>
           </div>
         </div>
-        <div style={{background:'#1E293B',borderRadius:16,border:'1px solid #334155',padding:32,boxShadow:'0 24px 80px rgba(0,0,0,.5)'}}>
+        <div style={{background:'var(--c-surface)',borderRadius:16,border:'1px solid var(--c-border2)',padding:32,boxShadow:'0 24px 80px rgba(0,0,0,.5)'}}>
           <div style={{marginBottom:24}}>
-            <h1 style={{fontSize:20,fontWeight:700,color:'#F1F5F9',marginBottom:6}}>{mode==='login'?'Welcome back':'Create account'}</h1>
-            <p style={{fontSize:13,color:'#475569'}}>{mode==='login'?'Sign in to your procurement workspace':'Set up your procurement workspace'}</p>
+            <h1 style={{fontSize:20,fontWeight:700,color:'var(--c-text1)',marginBottom:6}}>{mode==='login'?'Welcome back':'Create account'}</h1>
+            <p style={{fontSize:13,color:'var(--c-text5)'}}>{mode==='login'?'Sign in to your procurement workspace':'Set up your procurement workspace'}</p>
           </div>
           <div style={{marginBottom:16}}>
             <label style={LBL}>Email address</label>
@@ -312,7 +360,7 @@ function LoginPage(props) {
             <div style={{position:'relative'}}>
               <div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',display:'flex'}}><Ico n="lock" size={14} color="#475569"/></div>
               <input type={showPass?'text':'password'} value={pass} onChange={function(e){setPass(e.target.value);setError('');}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder={mode==='login'?'••••••••':'Minimum 6 characters'} style={Object.assign({},INP,{paddingLeft:36,paddingRight:40})}/>
-              <button onClick={function(){setShowPass(!showPass);}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'#475569',display:'flex',padding:4}}>
+              <button onClick={function(){setShowPass(!showPass);}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:4}}>
                 <Ico n={showPass?'eyeoff':'eye'} size={14}/>
               </button>
             </div>
@@ -323,14 +371,14 @@ function LoginPage(props) {
             {loading?<div style={{width:16,height:16,border:'2px solid rgba(0,0,0,.3)',borderTop:'2px solid #000',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>:<Ico n="arrr" size={16}/>}
             {loading?'Please wait…':(mode==='login'?'Sign In':'Create Account')}
           </button>
-          <div style={{textAlign:'center',fontSize:13,color:'#475569'}}>
+          <div style={{textAlign:'center',fontSize:13,color:'var(--c-text5)'}}>
             {mode==='login'?"Don't have an account? ":"Already have an account? "}
             <button onClick={function(){setMode(mode==='login'?'signup':'login');setError('');setMsg('');}} style={{background:'none',border:'none',color:'#F59E0B',fontWeight:600,fontSize:13}}>
               {mode==='login'?'Create one':'Sign in'}
             </button>
           </div>
         </div>
-        <div style={{textAlign:'center',marginTop:20,fontSize:11.5,color:'#334155'}}>Secured by Supabase Auth</div>
+        <div style={{textAlign:'center',marginTop:20,fontSize:11.5,color:'var(--c-ghost)'}}>Secured by Supabase Auth</div>
       </div>
     </div>
   );
@@ -360,17 +408,17 @@ function EditProfileModal(props) {
   return (
     <Modal title="Edit Team Member" onClose={onClose} w={480}
       footer={<div style={{display:'flex',gap:9}}>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
         <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <Ico n="save" size={13}/>{saving?'Saving…':'Save Changes'}
         </button>
       </div>}>
       {/* Avatar preview */}
-      <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:'#0F172A',borderRadius:10,border:'1px solid #334155',marginBottom:16}}>
+      <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:'var(--c-bg)',borderRadius:10,border:'1px solid var(--c-border2)',marginBottom:16}}>
         <div style={{width:52,height:52,borderRadius:'50%',background:form.avatar_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 0 0 3px '+form.avatar_color+'40'}}>
           {initials(u.email,form.full_name)}
         </div>
-        <div><div style={{fontSize:13.5,fontWeight:600,color:'#F1F5F9'}}>{u.email}</div><div style={{fontSize:11.5,color:'#475569',marginTop:2}}>ID: {String(u.id).slice(0,18)}…</div></div>
+        <div><div style={{fontSize:13.5,fontWeight:600,color:'var(--c-text1)'}}>{u.email}</div><div style={{fontSize:11.5,color:'var(--c-text5)',marginTop:2}}>ID: {String(u.id).slice(0,18)}…</div></div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
         <div style={{gridColumn:'1/-1'}}><label style={LBL}>Full Name</label><input style={INP} value={form.full_name} onChange={function(e){set('full_name',e.target.value);}} placeholder="e.g. Jane Smith"/></div>
@@ -391,7 +439,7 @@ function EditProfileModal(props) {
         <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Avatar Colour</label>
           <div style={{display:'flex',gap:9}}>
-            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:30,height:30,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid #F1F5F9':'3px solid transparent',transition:'border .15s'}}/>;} )}
+            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:30,height:30,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid var(--c-swatch-sel)':'3px solid transparent',transition:'border .15s'}}/>;} )}
           </div>
         </div>
       </div>
@@ -423,7 +471,7 @@ function AddUserModal(props) {
   return (
     <Modal title="Add New User" onClose={onClose} w={480}
       footer={<div style={{display:'flex',gap:9}}>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
         <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <Ico n="plus" size={13}/>{saving?'Creating…':'Create User'}
         </button>
@@ -431,7 +479,7 @@ function AddUserModal(props) {
       {/* Header note */}
       <div style={{display:'flex',alignItems:'flex-start',gap:8,padding:'10px 12px',background:'rgba(96,165,250,.08)',border:'1px solid rgba(96,165,250,.2)',borderRadius:8,marginBottom:16}}>
         <Ico n="shield" size={13} color="#60A5FA" style={{marginTop:1,flexShrink:0}}/>
-        <p style={{fontSize:12,color:'#64748B',lineHeight:1.6}}>The user will be created with the temporary password below. They can update it via <strong style={{color:'#94A3B8'}}>Settings → Reset Password</strong> after first login. Make sure <strong style={{color:'#94A3B8'}}>Confirm email</strong> is <strong style={{color:'#34D399'}}>OFF</strong> in Supabase Auth settings.</p>
+        <p style={{fontSize:12,color:'var(--c-text4)',lineHeight:1.6}}>The user will be created with the temporary password below. They can update it via <strong style={{color:'var(--c-text3)'}}>Settings → Reset Password</strong> after first login. Make sure <strong style={{color:'var(--c-text3)'}}>Confirm email</strong> is <strong style={{color:'#34D399'}}>OFF</strong> in Supabase Auth settings.</p>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
         <div style={{gridColumn:'1/-1'}}><label style={LBL}>Email Address *</label><input style={INP} type="email" value={form.email} onChange={function(e){set('email',e.target.value);setError('');}} placeholder="user@company.com"/></div>
@@ -453,7 +501,7 @@ function AddUserModal(props) {
           <label style={LBL}>Temporary Password *</label>
           <div style={{position:'relative'}}>
             <input style={Object.assign({},INP,{paddingRight:40})} type={showPw?'text':'password'} value={form.password} onChange={function(e){set('password',e.target.value);setError('');}} placeholder="Min. 6 characters"/>
-            <button onClick={function(){setShowPw(!showPw);}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'#475569',display:'flex',padding:4}}>
+            <button onClick={function(){setShowPw(!showPw);}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:4}}>
               <Ico n={showPw?'eyeoff':'eye'} size={14}/>
             </button>
           </div>
@@ -461,7 +509,7 @@ function AddUserModal(props) {
         <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Avatar Colour</label>
           <div style={{display:'flex',gap:9}}>
-            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:30,height:30,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>;} )}
+            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:30,height:30,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid var(--c-swatch-sel)':'3px solid transparent'}}/>;} )}
           </div>
         </div>
       </div>
@@ -478,25 +526,25 @@ function DeleteConfirmModal(props) {
   return (
     <Modal title="Remove User" onClose={onClose} w={420}
       footer={<div style={{display:'flex',gap:9}}>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
         <button onClick={async function(){setBusy(true);await onConfirm(u.id);setBusy(false);}} disabled={busy}
           style={{padding:'8px 20px',background:'#EF4444',border:'none',borderRadius:8,color:'#fff',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <Ico n="trash" size={13}/>{busy?'Removing…':'Remove User'}
         </button>
       </div>}>
       {/* User preview */}
-      <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',background:'#0F172A',borderRadius:10,border:'1px solid #334155',marginBottom:14}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',background:'var(--c-bg)',borderRadius:10,border:'1px solid var(--c-border2)',marginBottom:14}}>
         <div style={{width:42,height:42,borderRadius:'50%',background:aColor+'22',border:'2px solid '+aColor+'45',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:aColor,flexShrink:0}}>
           {initials(u.email,u.full_name)}
         </div>
-        <div><div style={{fontSize:13.5,fontWeight:600,color:'#F1F5F9'}}>{u.full_name||u.email}</div><div style={{fontSize:12,color:'#475569'}}>{u.email}</div></div>
+        <div><div style={{fontSize:13.5,fontWeight:600,color:'var(--c-text1)'}}>{u.full_name||u.email}</div><div style={{fontSize:12,color:'var(--c-text5)'}}>{u.email}</div></div>
       </div>
-      <p style={{fontSize:13,color:'#94A3B8',lineHeight:1.65}}>
+      <p style={{fontSize:13,color:'var(--c-text3)',lineHeight:1.65}}>
         This will <strong style={{color:'#F87171'}}>remove {u.full_name||u.email} from the team directory</strong> and they will no longer appear in the Users list.
       </p>
       <div style={{display:'flex',alignItems:'flex-start',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.07)',border:'1px solid rgba(248,113,113,.2)',borderRadius:8,marginTop:12}}>
         <Ico n="alert" size={13} color="#F87171" style={{marginTop:1,flexShrink:0}}/>
-        <p style={{fontSize:12,color:'#64748B',lineHeight:1.6}}>Their Supabase auth account remains intact. To fully delete the account, go to <strong style={{color:'#94A3B8'}}>Supabase Dashboard → Auth → Users</strong> and delete manually. In Demo Mode, this is local only.</p>
+        <p style={{fontSize:12,color:'var(--c-text4)',lineHeight:1.6}}>Their Supabase auth account remains intact. To fully delete the account, go to <strong style={{color:'var(--c-text3)'}}>Supabase Dashboard → Auth → Users</strong> and delete manually. In Demo Mode, this is local only.</p>
       </div>
     </Modal>
   );
@@ -510,7 +558,7 @@ function ResetPasswordModal(props) {
   return (
     <Modal title="Send Password Reset" onClose={onClose} w={420}
       footer={!done&&<div style={{display:'flex',gap:9}}>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
         <button onClick={async function(){setBusy(true);await onConfirm(u.email);setBusy(false);setDone(true);}} disabled={busy}
           style={{padding:'8px 20px',background:'#3B82F6',border:'none',borderRadius:8,color:'#fff',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
           <Ico n="mail" size={13}/>{busy?'Sending…':'Send Reset Email'}
@@ -518,11 +566,11 @@ function ResetPasswordModal(props) {
       </div>}>
       {!done ? (
         <div>
-          <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'#0F172A',borderRadius:10,border:'1px solid #334155',marginBottom:14}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'var(--c-bg)',borderRadius:10,border:'1px solid var(--c-border2)',marginBottom:14}}>
             <Ico n="mail" size={18} color="#60A5FA"/>
-            <div><div style={{fontSize:13,fontWeight:600,color:'#F1F5F9'}}>{u.full_name||u.email}</div><div style={{fontSize:12,color:'#475569'}}>{u.email}</div></div>
+            <div><div style={{fontSize:13,fontWeight:600,color:'var(--c-text1)'}}>{u.full_name||u.email}</div><div style={{fontSize:12,color:'var(--c-text5)'}}>{u.email}</div></div>
           </div>
-          <p style={{fontSize:13,color:'#94A3B8',lineHeight:1.65}}>A password reset link will be emailed to <strong style={{color:'#E2E8F0'}}>{u.email}</strong>. The link expires after 1 hour.</p>
+          <p style={{fontSize:13,color:'var(--c-text3)',lineHeight:1.65}}>A password reset link will be emailed to <strong style={{color:'var(--c-text2)'}}>{u.email}</strong>. The link expires after 1 hour.</p>
           {DEMO&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.2)',borderRadius:8,marginTop:12,fontSize:12,color:'#F59E0B'}}><Ico n="alert" size={13}/> Demo Mode — no email will actually be sent.</div>}
         </div>
       ) : (
@@ -530,9 +578,9 @@ function ResetPasswordModal(props) {
           <div style={{width:52,height:52,borderRadius:'50%',background:'rgba(52,211,153,.12)',border:'2px solid rgba(52,211,153,.3)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}>
             <Ico n="check" size={22} color="#34D399"/>
           </div>
-          <div style={{fontSize:14,fontWeight:600,color:'#F1F5F9',marginBottom:6}}>Reset email sent!</div>
-          <div style={{fontSize:13,color:'#475569'}}>Password reset link sent to <strong style={{color:'#E2E8F0'}}>{u.email}</strong></div>
-          <button onClick={onClose} style={{marginTop:18,padding:'9px 24px',background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13,cursor:'pointer'}}>Close</button>
+          <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6}}>Reset email sent!</div>
+          <div style={{fontSize:13,color:'var(--c-text5)'}}>Password reset link sent to <strong style={{color:'var(--c-text2)'}}>{u.email}</strong></div>
+          <button onClick={onClose} style={{marginTop:18,padding:'9px 24px',background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13,cursor:'pointer'}}>Close</button>
         </div>
       )}
     </Modal>
@@ -578,7 +626,7 @@ function TeamView(props) {
     else{onToast('Copy not supported in this browser','warning');}
   }
 
-  var TH={padding:'10px 16px',textAlign:'left',fontSize:10.5,color:'#475569',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',background:'#0A1628',whiteSpace:'nowrap'};
+  var TH={padding:'10px 16px',textAlign:'left',fontSize:10.5,color:'var(--c-text5)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',background:'var(--c-header)',whiteSpace:'nowrap'};
   var STATUSES=['All','Active','Inactive'];
 
   return (
@@ -590,15 +638,15 @@ function TeamView(props) {
           {label:'Total Users',    value:users.length,            color:'#60A5FA', icon:'team'},
           {label:'Active',         value:activeCount,             color:'#34D399', icon:'check'},
           {label:'Inactive',       value:users.length-activeCount,color:'#F87171', icon:'x'},
-        ].concat(ROLES.slice(0,2).map(function(r){return{label:r+'s',value:roleCounts[r]||0,color:ROLE_CFG[r]?ROLE_CFG[r].color:'#94A3B8',icon:'user'};}))
+        ].concat(ROLES.slice(0,2).map(function(r){return{label:r+'s',value:roleCounts[r]||0,color:ROLE_CFG[r]?ROLE_CFG[r].color:'var(--c-text3)',icon:'user'};}))
         .map(function(c){
           return (
-            <div key={c.label} style={{background:'#1E293B',borderRadius:12,border:'1px solid #1E3A5F',padding:'14px 16px'}}>
+            <div key={c.label} style={{background:'var(--c-surface)',borderRadius:12,border:'1px solid var(--c-border)',padding:'14px 16px'}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                <span style={{fontSize:10,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>{c.label}</span>
+                <span style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>{c.label}</span>
                 <div style={{width:24,height:24,borderRadius:6,background:c.color+'18',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n={c.icon} size={11} color={c.color}/></div>
               </div>
-              <div style={{fontSize:26,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{c.value}</div>
+              <div style={{fontSize:26,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{c.value}</div>
             </div>
           );
         })}
@@ -609,26 +657,26 @@ function TeamView(props) {
         <div style={{flex:1,minWidth:180,position:'relative'}}>
           <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',display:'flex'}}><Ico n="search" size={13} color="#475569"/></div>
           <input value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search by name or email…"
-            style={{width:'100%',paddingLeft:32,paddingRight:12,paddingTop:8,paddingBottom:8,background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#E2E8F0',fontSize:13}}/>
+            style={{width:'100%',paddingLeft:32,paddingRight:12,paddingTop:8,paddingBottom:8,background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text2)',fontSize:13}}/>
         </div>
         <select value={rf} onChange={function(e){setRf(e.target.value);}}
-          style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
+          style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
           <option value="All">All Roles</option>
           {ROLES.map(function(r){return <option key={r} value={r}>{r}</option>;} )}
         </select>
         <select value={sf} onChange={function(e){setSf(e.target.value);}}
-          style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
+          style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
           {STATUSES.map(function(s){return <option key={s} value={s}>{s==='All'?'All Status':s}</option>;} )}
         </select>
-        <span style={{fontSize:12,color:'#475569',whiteSpace:'nowrap'}}>{filtered.length} user{filtered.length!==1?'s':''}</span>
+        <span style={{fontSize:12,color:'var(--c-text5)',whiteSpace:'nowrap'}}>{filtered.length} user{filtered.length!==1?'s':''}</span>
         <button onClick={onAdd} style={{marginLeft:'auto',background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 14px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
           <Ico n="plus" size={13}/> Add User
         </button>
       </div>
 
       {/* Table */}
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,overflow:'hidden'}}>
-        {!filtered.length&&<div style={{padding:'32px 20px',textAlign:'center',color:'#475569',fontSize:13}}>No users match your filter.</div>}
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+        {!filtered.length&&<div style={{padding:'32px 20px',textAlign:'center',color:'var(--c-text5)',fontSize:13}}>No users match your filter.</div>}
         {filtered.length>0&&(
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
@@ -642,11 +690,11 @@ function TeamView(props) {
               <tbody>
                 {filtered.map(function(u, idx){
                   var isMe=currentUser&&u.id===currentUser.id;
-                  var rCfg=ROLE_CFG[u.role]||{color:'#94A3B8',bg:'rgba(148,163,184,.12)'};
+                  var rCfg=ROLE_CFG[u.role]||{color:'var(--c-text3)',bg:'rgba(148,163,184,.12)'};
                   var aColor=u.avatar_color||PC[idx%PC.length];
                   var active=u.is_active!==false;
                   return (
-                    <tr key={u.id} style={{borderTop:idx>0?'1px solid #1E3A5F':'none',background:isMe?'rgba(245,158,11,.03)':(!active?'rgba(248,113,113,.02)':'transparent')}}
+                    <tr key={u.id} style={{borderTop:idx>0?'1px solid var(--c-border)':'none',background:isMe?'rgba(245,158,11,.03)':(!active?'rgba(248,113,113,.02)':'transparent')}}
                       onMouseEnter={function(e){e.currentTarget.style.background=isMe?'rgba(245,158,11,.06)':'rgba(255,255,255,.025)';}}
                       onMouseLeave={function(e){e.currentTarget.style.background=isMe?'rgba(245,158,11,.03)':(!active?'rgba(248,113,113,.02)':'transparent');}}>
 
@@ -661,18 +709,18 @@ function TeamView(props) {
                           </div>
                           <div style={{minWidth:0}}>
                             <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                              <span style={{fontSize:13,fontWeight:600,color:active?'#F1F5F9':'#64748B',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                              <span style={{fontSize:13,fontWeight:600,color:active?'var(--c-text1)':'var(--c-text4)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                                 {u.full_name||'—'}
                               </span>
                               {isMe&&<span style={{fontSize:9.5,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,.12)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(245,158,11,.25)',flexShrink:0}}>YOU</span>}
                               {!active&&<span style={{fontSize:9.5,fontWeight:700,color:'#F87171',background:'rgba(248,113,113,.12)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(248,113,113,.25)',flexShrink:0}}>INACTIVE</span>}
                             </div>
                             <div style={{display:'flex',alignItems:'center',gap:6}}>
-                              <span style={{fontSize:12,color:'#475569',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.email}</span>
+                              <span style={{fontSize:12,color:'var(--c-text5)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.email}</span>
                               <button onClick={function(){copyEmail(u.email);}} title="Copy email"
-                                style={{background:'none',border:'none',color:'#334155',display:'flex',padding:2,flexShrink:0,cursor:'pointer'}}
+                                style={{background:'none',border:'none',color:'var(--c-ghost)',display:'flex',padding:2,flexShrink:0,cursor:'pointer'}}
                                 onMouseEnter={function(e){e.currentTarget.style.color='#60A5FA';}}
-                                onMouseLeave={function(e){e.currentTarget.style.color='#334155';}}>
+                                onMouseLeave={function(e){e.currentTarget.style.color='var(--c-ghost)';}}>
                                 <Ico n="copy" size={11}/>
                               </button>
                             </div>
@@ -690,7 +738,7 @@ function TeamView(props) {
 
                       {/* Department */}
                       <td style={{padding:'13px 16px'}}>
-                        <span style={{fontSize:12.5,color:u.department?'#94A3B8':'#334155'}}>{u.department||'—'}</span>
+                        <span style={{fontSize:12.5,color:u.department?'var(--c-text3)':'var(--c-ghost)'}}>{u.department||'—'}</span>
                       </td>
 
                       {/* Status toggle */}
@@ -709,7 +757,7 @@ function TeamView(props) {
 
                       {/* Joined */}
                       <td style={{padding:'13px 16px'}}>
-                        <span style={{fontSize:12.5,color:'#64748B',whiteSpace:'nowrap'}}>{shortDate(u.created_at)}</span>
+                        <span style={{fontSize:12.5,color:'var(--c-text4)',whiteSpace:'nowrap'}}>{shortDate(u.created_at)}</span>
                       </td>
 
                       {/* Actions */}
@@ -743,13 +791,13 @@ function TeamView(props) {
         )}
 
         {/* Table footer */}
-        <div style={{padding:'10px 20px',borderTop:'1px solid #1E3A5F',background:'#0A1628',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-          <span style={{fontSize:12,color:'#475569'}}>{activeCount} active · {users.length-activeCount} inactive</span>
+        <div style={{padding:'10px 20px',borderTop:'1px solid var(--c-border)',background:'var(--c-header)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+          <span style={{fontSize:12,color:'var(--c-text5)'}}>{activeCount} active · {users.length-activeCount} inactive</span>
           <div style={{display:'flex',gap:10}}>
             {ROLES.map(function(r){
               var cnt=roleCounts[r]||0;
               if(!cnt)return null;
-              var cfg=ROLE_CFG[r]||{color:'#94A3B8'};
+              var cfg=ROLE_CFG[r]||{color:'var(--c-text3)'};
               return <div key={r} style={{display:'flex',alignItems:'center',gap:4,fontSize:11.5,color:cfg.color}}>
                 <span style={{width:6,height:6,borderRadius:'50%',background:cfg.color}}/>{cnt} {r}
               </div>;
@@ -761,12 +809,12 @@ function TeamView(props) {
       {/* Role guide */}
       <div style={{background:'rgba(96,165,250,.04)',border:'1px solid rgba(96,165,250,.12)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'flex-start',gap:10}}>
         <Ico n="shield" size={14} color="#60A5FA" style={{marginTop:1,flexShrink:0}}/>
-        <div style={{fontSize:12.5,color:'#64748B',lineHeight:1.65}}>
-          <strong style={{color:'#94A3B8'}}>Role guide — </strong>
+        <div style={{fontSize:12.5,color:'var(--c-text4)',lineHeight:1.65}}>
+          <strong style={{color:'var(--c-text3)'}}>Role guide — </strong>
           <strong style={{color:'#F59E0B'}}>Admin</strong>: full access &amp; user management ·{' '}
           <strong style={{color:'#3B82F6'}}>Manager</strong>: create &amp; edit all projects ·{' '}
           <strong style={{color:'#34D399'}}>Member</strong>: edit assigned projects ·{' '}
-          <strong style={{color:'#94A3B8'}}>Viewer</strong>: read-only.
+          <strong style={{color:'var(--c-text3)'}}>Viewer</strong>: read-only.
           {!DEMO&&<span style={{display:'block',marginTop:4}}>First-time admin setup — run in Supabase SQL Editor: <code style={{background:'rgba(255,255,255,.06)',padding:'1px 6px',borderRadius:4,fontSize:11}}>UPDATE profiles SET role = 'admin' WHERE email = 'your@email.com';</code></span>}
           {DEMO&&<span style={{color:'#60A5FA',display:'block',marginTop:4}}>Demo Mode — changes are local only and not persisted.</span>}
         </div>
@@ -796,7 +844,7 @@ function ProjectModal(props) {
     setSaving(false);
   }
   var footer=(<div style={{display:'flex',gap:9}}>
-    <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+    <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
     <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
       <Ico n="save" size={13}/>{saving?'Saving…':(project?'Save Changes':'Create Project')}
     </button>
@@ -818,12 +866,12 @@ function ProjectModal(props) {
             </select>
           </div>
         </div>
-        <div style={{padding:'11px 14px',background:'#0F172A',borderRadius:8,border:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontSize:12,color:'#475569'}}>Budget preview</span>
-          <span style={{fontSize:16,fontWeight:700,color:'#F1F5F9'}}>{form.budget&&!isNaN(+form.budget)?fmt(+form.budget,form.currency||'USD'):'—'}</span>
+        <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:12,color:'var(--c-text5)'}}>Budget preview</span>
+          <span style={{fontSize:16,fontWeight:700,color:'var(--c-text1)'}}>{form.budget&&!isNaN(+form.budget)?fmt(+form.budget,form.currency||'USD'):'—'}</span>
         </div>
         <div><label style={LBL}>Project Colour</label>
-          <div style={{display:'flex',gap:9}}>{PC.map(function(c){return <button key={c} onClick={function(){set('color',c);}} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>;})}</div>
+          <div style={{display:'flex',gap:9}}>{PC.map(function(c){return <button key={c} onClick={function(){set('color',c);}} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.color===c?'3px solid var(--c-swatch-sel)':'3px solid transparent'}}/>;})}</div>
         </div>
         {error&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:7,fontSize:12.5,color:'#F87171'}}><Ico n="alert" size={13}/>{error}</div>}
       </div>
@@ -833,60 +881,92 @@ function ProjectModal(props) {
 
 /* ── Item Modal ─────────────────────────────────────────────── */
 function ItemModal(props) {
-  var item=props.item,projectId=props.projectId,categories=props.categories;
-  var currency=props.currency,defStage=props.defStage,onSave=props.onSave,onClose=props.onClose;
-  var def=item||{name:'',category:categories[0]||'Hardware',vendor:'',status:defStage||'Creation',
-    qty:'1',unit_cost:'',delivery_date:'',lead_time_days:'',order_by_date:''};
-  var _f=useState(def),form=_f[0],setForm=_f[1];
-  var _e=useState(''),error=_e[0],setError=_e[1];
-  var _s=useState(false),saving=_s[0],setSaving=_s[1];
+  var item=props.item, projectId=props.projectId, categories=props.categories;
+  var currency=props.currency, defStage=props.defStage, onSave=props.onSave, onClose=props.onClose;
+
+  /* Pre-populate from existing item — handle both field name conventions */
+  var initQty      = item ? (item.qty||1)            : 1;
+  var initUnitCost = item ? (item.unit_cost||item.cost||'') : '';
+  var initDelivery = item ? (item.delivery_date||item.deadline||'') : '';
+  var initLead     = item ? (item.lead_time_days||'') : '';
+
+  var def = {
+    name:          item ? item.name           : '',
+    category:      item ? item.category       : (categories[0]||'Hardware'),
+    vendor:        item ? item.vendor         : '',
+    status:        item ? item.status         : (defStage||'Creation'),
+    qty:           String(initQty),
+    unit_cost:     initUnitCost==='' ? '' : String(initUnitCost),
+    delivery_date: initDelivery,
+    lead_time_days:initLead==='' ? '' : String(initLead),
+    order_by_date: item ? (item.order_by_date||calcOrderBy(initDelivery,initLead)) : '',
+    total_cost:    +initQty * (+initUnitCost||0),
+  };
+
+  var _f=useState(def), form=_f[0], setForm=_f[1];
+  var _e=useState(''),  error=_e[0], setError=_e[1];
+  var _s=useState(false), saving=_s[0], setSaving=_s[1];
 
   function set(k,v) {
     setForm(function(f) {
       var next = Object.assign({},f,{[k]:v});
-      /* Recompute total cost whenever qty or unit_cost changes */
-      if(k==='qty'||k==='unit_cost') {
-        var q=+(k==='qty'?v:next.qty)||0, uc=+(k==='unit_cost'?v:next.unit_cost)||0;
-        next.total_cost = q*uc;
+      if (k==='qty'||k==='unit_cost') {
+        var q  = +(k==='qty'       ? v : next.qty)||0;
+        var uc = +(k==='unit_cost' ? v : next.unit_cost)||0;
+        next.total_cost = q * uc;
       }
-      /* Recompute order_by_date whenever delivery_date or lead_time changes */
-      if(k==='delivery_date'||k==='lead_time_days') {
+      if (k==='delivery_date'||k==='lead_time_days') {
         next.order_by_date = calcOrderBy(
-          k==='delivery_date'?v:next.delivery_date,
-          k==='lead_time_days'?v:next.lead_time_days
+          k==='delivery_date'  ? v : next.delivery_date,
+          k==='lead_time_days' ? v : next.lead_time_days
         );
       }
       return next;
     });
   }
 
-  /* Initialise derived fields when editing existing item */
-  var totalCost = form.total_cost !== undefined ? form.total_cost : ((+form.qty||1)*(+form.unit_cost||0));
-  var orderBy   = form.order_by_date || calcOrderBy(form.delivery_date, form.lead_time_days);
-  var urgency   = urgencyLabel(orderBy);
+  var qty      = Math.max(1, Math.round(+form.qty||1));
+  var unitCost = +form.unit_cost||0;
+  var totalCost = qty * unitCost;
+  var orderBy  = form.order_by_date || calcOrderBy(form.delivery_date, form.lead_time_days);
+  var urgency  = urgencyLabel(orderBy);
+  var CUR      = currency||'USD';
 
   async function submit() {
-    if(!form.name.trim())       return setError('Item name is required.');
-    if(!form.vendor.trim())     return setError('Vendor is required.');
-    if(!form.unit_cost||isNaN(+form.unit_cost)||+form.unit_cost<=0) return setError('Unit cost must be a positive number.');
-    if(!form.qty||isNaN(+form.qty)||+form.qty<1) return setError('Quantity must be at least 1.');
-    if(!form.delivery_date)     return setError('Delivery date is required.');
-    if(!form.lead_time_days||isNaN(+form.lead_time_days)||+form.lead_time_days<0) return setError('Lead time (days) is required.');
-    setError('');setSaving(true);
-    var qty=Math.round(+form.qty), uc=+form.unit_cost;
-    await onSave(Object.assign({},form,{
-      qty:qty, unit_cost:uc, cost:qty*uc,
-      lead_time_days:+form.lead_time_days,
-      order_by_date: calcOrderBy(form.delivery_date,form.lead_time_days),
-      deadline: form.delivery_date,  /* keep legacy field in sync */
-      id:item&&item.id, projectId:item?item.projectId:projectId
-    }));
-    setSaving(false);
+    /* Only name, vendor, and unit cost are hard required */
+    if (!form.name.trim())  return setError('Item name is required.');
+    if (!form.vendor.trim()) return setError('Vendor is required.');
+    if (!form.unit_cost || isNaN(+form.unit_cost) || +form.unit_cost < 0)
+      return setError('Unit cost is required (enter 0 if free).');
+    setError(''); setSaving(true);
+    try {
+      var q  = Math.max(1, Math.round(+form.qty||1));
+      var uc = Math.max(0, +form.unit_cost||0);
+      var ob = form.delivery_date && form.lead_time_days
+               ? calcOrderBy(form.delivery_date, form.lead_time_days) : null;
+      await onSave({
+        name:           form.name.trim(),
+        category:       form.category,
+        vendor:         form.vendor.trim(),
+        status:         form.status,
+        qty:            q,
+        unit_cost:      uc,
+        cost:           q * uc,
+        deadline:       form.delivery_date || null,   /* original DB column */
+        delivery_date:  form.delivery_date || null,
+        lead_time_days: form.lead_time_days ? +form.lead_time_days : null,
+        order_by_date:  ob || null,
+        id:             item ? item.id       : undefined,
+        projectId:      item ? item.projectId : projectId,
+      });
+    } catch(e) {
+      setError('Save failed: ' + (e.message||'unknown error'));
+      setSaving(false);
+    }
   }
 
-  var CUR=currency||'USD';
   var footer=(<div style={{display:'flex',gap:9}}>
-    <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+    <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
     <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
       <Ico n="save" size={13}/>{saving?'Saving…':(item?'Save Changes':'Add Equipment')}
     </button>
@@ -896,13 +976,13 @@ function ItemModal(props) {
     <Modal title={item?'Edit Equipment':'Add Equipment'} onClose={onClose} w={560} footer={footer}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
 
-        {/* Row 1 — Name */}
+        {/* Name */}
         <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Equipment / Item Name *</label>
-          <input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);}} placeholder="e.g. Dell XPS Workstations"/>
+          <input style={INP} value={form.name} onChange={function(e){set('name',e.target.value); setError('');}} placeholder="e.g. Dell XPS Workstations"/>
         </div>
 
-        {/* Row 2 — Category + Stage */}
+        {/* Category + Stage */}
         <div>
           <label style={LBL}>Category</label>
           <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.category} onChange={function(e){set('category',e.target.value);}}>
@@ -916,55 +996,53 @@ function ItemModal(props) {
           </select>
         </div>
 
-        {/* Row 3 — Vendor */}
+        {/* Vendor */}
         <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Vendor *</label>
-          <input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value);}} placeholder="e.g. Dell Technologies"/>
+          <input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value); setError('');}} placeholder="e.g. Dell Technologies"/>
         </div>
 
-        {/* Row 4 — Qty + Unit cost */}
+        {/* Qty + Unit cost */}
         <div>
-          <label style={LBL}>Quantity *</label>
+          <label style={LBL}>Quantity</label>
           <input style={INP} type="number" min="1" step="1" value={form.qty} onChange={function(e){set('qty',e.target.value);}} placeholder="1"/>
         </div>
         <div>
           <label style={LBL}>Unit Cost ({CUR}) *</label>
-          <input style={INP} type="number" min="0" step="0.01" value={form.unit_cost} onChange={function(e){set('unit_cost',e.target.value);}} placeholder="0.00"/>
+          <input style={INP} type="number" min="0" step="0.01" value={form.unit_cost} onChange={function(e){set('unit_cost',e.target.value); setError('');}} placeholder="0.00"/>
         </div>
 
-        {/* Row 5 — Total cost (computed, read-only) */}
+        {/* Total cost — live computed */}
         <div style={{gridColumn:'1/-1'}}>
-          <div style={{padding:'12px 14px',background:'#0F172A',borderRadius:8,border:'1px solid #334155',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-            <div style={{fontSize:12,color:'#475569'}}>
+          <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+            <div style={{fontSize:12,color:'var(--c-text5)'}}>
               Total Cost
-              {form.qty&&form.unit_cost ? (
-                <span style={{color:'#334155',marginLeft:8}}>{form.qty} × {fmt(+form.unit_cost||0,CUR)}</span>
-              ) : null}
+              {form.qty && form.unit_cost
+                ? <span style={{color:'var(--c-ghost)',marginLeft:8}}>{qty} × {fmt(unitCost,CUR)}</span>
+                : null}
             </div>
-            <span style={{fontSize:18,fontWeight:700,color:'#F1F5F9'}}>{fmt(totalCost,CUR)}</span>
+            <span style={{fontSize:18,fontWeight:700,color:'var(--c-text1)'}}>{fmt(totalCost,CUR)}</span>
           </div>
         </div>
 
-        {/* Row 6 — Delivery date + Lead time */}
+        {/* Delivery date + Lead time (optional) */}
         <div>
-          <label style={LBL}>Delivery Date *</label>
-          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date"
-            value={form.delivery_date} onChange={function(e){set('delivery_date',e.target.value);}}/>
+          <label style={LBL}>Delivery Date <span style={{color:'var(--c-ghost)',fontWeight:400}}>(optional)</span></label>
+          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.delivery_date} onChange={function(e){set('delivery_date',e.target.value);}}/>
         </div>
         <div>
-          <label style={LBL}>Lead Time (days) *</label>
-          <input style={INP} type="number" min="0" step="1" value={form.lead_time_days}
-            onChange={function(e){set('lead_time_days',e.target.value);}} placeholder="e.g. 14"/>
+          <label style={LBL}>Lead Time (days) <span style={{color:'var(--c-ghost)',fontWeight:400}}>(optional)</span></label>
+          <input style={INP} type="number" min="0" step="1" value={form.lead_time_days} onChange={function(e){set('lead_time_days',e.target.value);}} placeholder="e.g. 14"/>
         </div>
 
-        {/* Row 7 — Order by date (auto-computed) */}
+        {/* Order by date — auto computed */}
         <div style={{gridColumn:'1/-1'}}>
-          <div style={{padding:'12px 14px',background:'#0F172A',borderRadius:8,border:'1px solid '+(orderBy?urgency.color+'40':'#334155'),display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid '+(orderBy ? urgency.color+'40' : 'var(--c-border2)'),display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div>
-              <div style={{fontSize:11,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:3}}>
-                Order By Date <span style={{color:'#334155',fontWeight:400,textTransform:'none',letterSpacing:0}}>(auto-calculated: Delivery − Lead time)</span>
+              <div style={{fontSize:10.5,color:'var(--c-text5)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:2}}>
+                Order By Date <span style={{color:'var(--c-ghost)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(Delivery − Lead time)</span>
               </div>
-              <div style={{fontSize:16,fontWeight:700,color:orderBy?urgency.color:'#334155'}}>
+              <div style={{fontSize:16,fontWeight:700,color:orderBy ? urgency.color : 'var(--c-ghost)'}}>
                 {orderBy || '— fill Delivery Date and Lead Time above —'}
               </div>
             </div>
@@ -977,9 +1055,11 @@ function ItemModal(props) {
         </div>
 
         {/* Error */}
-        {error&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:7,fontSize:12.5,color:'#F87171'}}>
-          <Ico n="alert" size={13}/>{error}
-        </div>}
+        {error && (
+          <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.3)',borderRadius:8,fontSize:12.5,color:'#F87171'}}>
+            <Ico n="alert" size={14}/>{error}
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -1005,70 +1085,70 @@ function Dashboard(props) {
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
         {cards.map(function(c){return(
-          <div key={c.label} style={{background:'#1E293B',borderRadius:12,border:'1px solid #1E3A5F',padding:'18px 20px'}}>
+          <div key={c.label} style={{background:'var(--c-surface)',borderRadius:12,border:'1px solid var(--c-border)',padding:'18px 20px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-              <span style={{fontSize:10.5,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px'}}>{c.label}</span>
+              <span style={{fontSize:10.5,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px'}}>{c.label}</span>
               <div style={{width:28,height:28,borderRadius:7,background:c.color+'18',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n={c.icon} size={13} color={c.color}/></div>
             </div>
-            <div style={{fontSize:24,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{c.value}</div>
-            <div style={{fontSize:11,color:'#475569',marginTop:5}}>{c.sub}</div>
+            <div style={{fontSize:24,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{c.value}</div>
+            <div style={{fontSize:11,color:'var(--c-text5)',marginTop:5}}>{c.sub}</div>
           </div>
         );})}
       </div>
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'16px 22px'}}>
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'16px 22px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:10}}>
           <div>
-            <div style={{fontSize:11,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:4}}>Budget Utilization</div>
-            <div style={{fontSize:13.5,color:'#94A3B8'}}>{fmt(tSpend,currency)} <span style={{color:'#475569'}}>of {fmt(tBudget,currency)}</span></div>
+            <div style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:4}}>Budget Utilization</div>
+            <div style={{fontSize:13.5,color:'var(--c-text3)'}}>{fmt(tSpend,currency)} <span style={{color:'var(--c-text5)'}}>of {fmt(tBudget,currency)}</span></div>
           </div>
           <span style={{fontSize:24,fontWeight:700,color:barCol}}>{pct}%</span>
         </div>
-        <div style={{height:8,background:'#0F172A',borderRadius:999,overflow:'hidden'}}>
+        <div style={{height:8,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
           <div style={{height:'100%',borderRadius:999,width:pct+'%',background:'linear-gradient(90deg,'+barCol+'cc,'+barCol+')',transition:'width .5s'}}/>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:14}}>
-        <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'18px 20px'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#E2E8F0',marginBottom:14}}>Spend by Project</div>
+        <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Spend by Project</div>
           <BarChart data={chartData} height={200} currency={currency}/>
         </div>
-        <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'18px 20px',display:'flex',flexDirection:'column'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'#E2E8F0',marginBottom:14}}>Pipeline Overview</div>
+        <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px',display:'flex',flexDirection:'column'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Pipeline Overview</div>
           <div style={{display:'flex',flexDirection:'column',gap:12,flex:1}}>
             {stageRows.map(function(row){
               var cfg=SC[row.name],p=items.length?Math.round((row.count/items.length)*100):0;
               return(<div key={row.name}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
                   <span style={{fontSize:12,color:cfg.color}}>{row.name}</span>
-                  <span style={{fontSize:12,color:'#475569'}}>{row.count} items ({p}%)</span>
+                  <span style={{fontSize:12,color:'var(--c-text5)'}}>{row.count} items ({p}%)</span>
                 </div>
-                <div style={{height:5,background:'#0F172A',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p+'%',background:cfg.color,opacity:.7}}/></div>
+                <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p+'%',background:cfg.color,opacity:.7}}/></div>
               </div>);
             })}
           </div>
-          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid #334155'}}>
-            <div style={{fontSize:10.5,color:'#475569',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Overall Delivery Rate</div>
+          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--c-border2)'}}>
+            <div style={{fontSize:10.5,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Overall Delivery Rate</div>
             <div style={{fontSize:22,fontWeight:700,color:'#34D399'}}>{items.length?Math.round((deliv/items.length)*100):0}%</div>
           </div>
         </div>
       </div>
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'18px 20px'}}>
-        <div style={{fontSize:13,fontWeight:600,color:'#E2E8F0',marginBottom:14}}>Project Summary</div>
-        {!projects.length&&<div style={{fontSize:13,color:'#475569',textAlign:'center',padding:'20px 0'}}>No projects yet.</div>}
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
+        <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Project Summary</div>
+        {!projects.length&&<div style={{fontSize:13,color:'var(--c-text5)',textAlign:'center',padding:'20px 0'}}>No projects yet.</div>}
         {projects.map(function(p,idx){
           var pi=items.filter(function(i){return i.projectId===p.id;});
           var ps=pi.reduce(function(s,i){return s+i.cost;},0);
           var pp=p.budget?Math.min(100,Math.round((ps/p.budget)*100)):0;
           var pd=pi.filter(function(i){return i.status==='Delivered';}).length;
-          return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:14,padding:'10px 0',borderBottom:idx<projects.length-1?'1px solid #1E3A5F':'none'}}>
+          return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:14,padding:'10px 0',borderBottom:idx<projects.length-1?'1px solid var(--c-border)':'none'}}>
             <div style={{width:9,height:9,borderRadius:'50%',background:p.color,flexShrink:0}}/>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,color:'#E2E8F0',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:5}}>{p.name}</div>
-              <div style={{height:3,background:'#0F172A',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pp+'%',background:p.color}}/></div>
+              <div style={{fontSize:13,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:5}}>{p.name}</div>
+              <div style={{height:3,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pp+'%',background:p.color}}/></div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:12.5,fontWeight:600,color:'#E2E8F0'}}>{fmt(ps,currency)}</div>
-              <div style={{fontSize:11,color:'#475569'}}>{pd}/{pi.length} delivered</div>
+              <div style={{fontSize:12.5,fontWeight:600,color:'var(--c-text2)'}}>{fmt(ps,currency)}</div>
+              <div style={{fontSize:11,color:'var(--c-text5)'}}>{pd}/{pi.length} delivered</div>
             </div>
           </div>);
         })}
@@ -1088,19 +1168,19 @@ function ProjectsList(props) {
   });},[projects,items]);
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
-      <div style={{fontSize:12,color:'#475569'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
-      {!projects.length&&<div style={{background:'#1E293B',border:'1px dashed #334155',borderRadius:14,padding:'50px 20px',textAlign:'center',color:'#475569',fontSize:13}}>No projects yet. Click <strong style={{color:'#F59E0B'}}>New Project</strong> to get started.</div>}
+      <div style={{fontSize:12,color:'var(--c-text5)'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
+      {!projects.length&&<div style={{background:'var(--c-surface)',border:'1px dashed #334155',borderRadius:14,padding:'50px 20px',textAlign:'center',color:'var(--c-text5)',fontSize:13}}>No projects yet. Click <strong style={{color:'#F59E0B'}}>New Project</strong> to get started.</div>}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}}>
         {stats.map(function(p){return(
-          <div key={p.id} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:14,overflow:'hidden',transition:'border-color .15s'}}
+          <div key={p.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:14,overflow:'hidden',transition:'border-color .15s'}}
             onMouseEnter={function(e){e.currentTarget.style.borderColor=p.color+'55';}}
-            onMouseLeave={function(e){e.currentTarget.style.borderColor='#1E3A5F';}}>
+            onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--c-border)';}}>
             <div style={{height:3,background:p.color}}/>
             <div style={{padding:'16px 16px 14px'}}>
               <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:10}}>
                 <div style={{flex:1,minWidth:0,marginRight:10}}>
-                  <div style={{fontSize:14,fontWeight:700,color:'#F1F5F9',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
-                  <div style={{fontSize:11.5,color:'#475569',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.description||'No description'}</div>
+                  <div style={{fontSize:14,fontWeight:700,color:'var(--c-text1)',marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                  <div style={{fontSize:11.5,color:'var(--c-text5)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.description||'No description'}</div>
                 </div>
                 <div style={{display:'flex',gap:5,flexShrink:0}}>
                   <button onClick={function(e){e.stopPropagation();onEdit(p);}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:6,padding:'4px 7px',color:'#60A5FA',display:'flex'}}><Ico n="edit" size={11}/></button>
@@ -1108,8 +1188,8 @@ function ProjectsList(props) {
                 </div>
               </div>
               <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'#475569'}}>Budget</span><span style={{fontSize:11,color:'#94A3B8'}}>{fmt(p.spend,currency)} / {fmt(p.budget,currency)}</span></div>
-                <div style={{height:5,background:'#0F172A',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Budget</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.spend,currency)} / {fmt(p.budget,currency)}</span></div>
+                <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
               </div>
               <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
                 {STAGES.map(function(s){var cnt=p.sc[s]||0,cfg=SC[s];return(<div key={s} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:999,background:cfg.bg,border:'1px solid '+cfg.color+'25'}}><span style={{fontSize:9.5,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.4px'}}>{s}</span><span style={{fontSize:11.5,fontWeight:700,color:cfg.color}}>{cnt}</span></div>);})}
@@ -1138,62 +1218,62 @@ function Kanban(props) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
       <div>
-        <button onClick={onBack} style={{background:'none',border:'none',color:'#475569',fontSize:12.5,display:'flex',alignItems:'center',gap:5,padding:'0 0 10px',cursor:'pointer'}}><Ico n="chevl" size={13}/> All Projects</button>
+        <button onClick={onBack} style={{background:'none',border:'none',color:'var(--c-text5)',fontSize:12.5,display:'flex',alignItems:'center',gap:5,padding:'0 0 10px',cursor:'pointer'}}><Ico n="chevl" size={13}/> All Projects</button>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:10,height:10,borderRadius:'50%',background:project.color}}/>
-            <div><h2 style={{margin:0,fontSize:17,fontWeight:700,color:'#F1F5F9'}}>{project.name}</h2><div style={{fontSize:12,color:'#475569'}}>{project.description}</div></div>
+            <div><h2 style={{margin:0,fontSize:17,fontWeight:700,color:'var(--c-text1)'}}>{project.name}</h2><div style={{fontSize:12,color:'var(--c-text5)'}}>{project.description}</div></div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{position:'relative'}}>
               <div style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',display:'flex'}}><Ico n="search" size={13} color="#475569"/></div>
-              <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search equipment…" style={{paddingLeft:28,paddingRight:10,paddingTop:7,paddingBottom:7,background:'#1E293B',border:'1px solid #334155',borderRadius:7,color:'#E2E8F0',fontSize:12.5,width:180}}/>
+              <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search equipment…" style={{paddingLeft:28,paddingRight:10,paddingTop:7,paddingBottom:7,background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:7,color:'var(--c-text2)',fontSize:12.5,width:180}}/>
             </div>
             <button onClick={function(){onAdd('Creation');}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 14px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:5}}><Ico n="plus" size={13}/> Add Equipment</button>
           </div>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-        {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(spend,currency),pct+'% used'],['Items',allPi.length,'Total'],['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length]].map(function(r){return(<div key={r[0]} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:20,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:'#475569',marginTop:3}}>{r[2]}</div></div>);})}
+        {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(spend,currency),pct+'% used'],['Items',allPi.length,'Total'],['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length]].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
       </div>
-      <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'11px 16px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span><span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span></div>
-        <div style={{height:6,background:'#0F172A',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/></div>
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'11px 16px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span><span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span></div>
+        <div style={{height:6,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/></div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {STAGES.map(function(stage,si){
           var col=pi.filter(function(i){return i.status===stage;}),cfg=SC[stage];
-          return(<div key={stage} style={{background:'#0A1422',border:'1px solid #1E293B',borderRadius:12,display:'flex',flexDirection:'column',minHeight:280}}>
+          return(<div key={stage} style={{background:'var(--c-kanban)',border:'1px solid var(--c-border)',borderRadius:12,display:'flex',flexDirection:'column',minHeight:280}}>
             <div style={{padding:'11px 12px 9px',borderBottom:'2px solid '+cfg.color+'35',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
               <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:cfg.color}}/><span style={{fontSize:11,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.6px'}}>{stage}</span></div>
               <span style={{fontSize:11,fontWeight:700,color:cfg.color,background:cfg.bg,padding:'1px 7px',borderRadius:999}}>{col.length}</span>
             </div>
             <div style={{flex:1,overflowY:'auto',padding:8}}>
-              {!col.length&&<div style={{textAlign:'center',padding:'22px 8px',color:'#334155',fontSize:12,border:'1px dashed #1E3A5F',borderRadius:8,marginTop:4}}>No items</div>}
+              {!col.length&&<div style={{textAlign:'center',padding:'22px 8px',color:'var(--c-ghost)',fontSize:12,border:'1px dashed #1E3A5F',borderRadius:8,marginTop:4}}>No items</div>}
               {col.map(function(item){
                 var orderBy   = item.order_by_date || calcOrderBy(item.delivery_date||item.deadline, item.lead_time_days);
                 var urgency   = urgencyLabel(orderBy);
                 var totalCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
                 return(
-                <div key={item.id} style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
+                <div key={item.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
                   {/* Name */}
-                  <div style={{fontSize:12.5,fontWeight:600,color:'#E2E8F0',marginBottom:2,lineHeight:1.35}}>{item.name}</div>
-                  <div style={{fontSize:11,color:'#475569',marginBottom:8}}>{item.vendor}</div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:'var(--c-text2)',marginBottom:2,lineHeight:1.35}}>{item.name}</div>
+                  <div style={{fontSize:11,color:'var(--c-text5)',marginBottom:8}}>{item.vendor}</div>
 
                   {/* Cost breakdown */}
-                  <div style={{background:'#0F172A',borderRadius:6,padding:'7px 9px',marginBottom:8}}>
+                  <div style={{background:'var(--c-bg)',borderRadius:6,padding:'7px 9px',marginBottom:8}}>
                     {item.qty>1 ? (
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:10.5,color:'#475569'}}>{item.qty} × {fmt(item.unit_cost||0,currency)}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:'#E2E8F0'}}>{fmt(totalCost,currency)}</span>
+                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty} × {fmt(item.unit_cost||0,currency)}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,currency)}</span>
                       </div>
                     ) : (
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:10.5,color:'#475569'}}>{item.category}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:'#E2E8F0'}}>{fmt(totalCost,currency)}</span>
+                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.category}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,currency)}</span>
                       </div>
                     )}
-                    {item.qty>1&&<div style={{fontSize:10,color:'#334155',marginTop:2}}>{item.category}</div>}
+                    {item.qty>1&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{item.category}</div>}
                   </div>
 
                   {/* Dates block */}
@@ -1206,15 +1286,15 @@ function Kanban(props) {
                     {/* Delivery */}
                     <div style={{background:'rgba(96,165,250,.06)',borderRadius:6,padding:'5px 8px',border:'1px solid rgba(96,165,250,.15)'}}>
                       <div style={{fontSize:9,color:'#60A5FA',fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',marginBottom:2}}>Delivery</div>
-                      <div style={{fontSize:11.5,fontWeight:600,color:'#94A3B8'}}>{item.delivery_date||item.deadline||'—'}</div>
+                      <div style={{fontSize:11.5,fontWeight:600,color:'var(--c-text3)'}}>{item.delivery_date||item.deadline||'—'}</div>
                     </div>
                   </div>
-                  {item.lead_time_days&&<div style={{fontSize:10.5,color:'#334155',marginBottom:8}}>Lead time: {item.lead_time_days} day{item.lead_time_days!==1?'s':''}</div>}
+                  {item.lead_time_days&&<div style={{fontSize:10.5,color:'var(--c-ghost)',marginBottom:8}}>Lead time: {item.lead_time_days} day{item.lead_time_days!==1?'s':''}</div>}
 
                   {/* Stage move + Edit/Delete */}
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                     <div style={{display:'flex',gap:4}}>
-                      {si>0&&<button onClick={function(){onMove(item.id,STAGES[si-1]);}} style={{background:'rgba(148,163,184,.08)',border:'1px solid #334155',borderRadius:5,padding:'3px 7px',color:'#64748B',display:'flex',alignItems:'center',gap:3,fontSize:10.5}}><Ico n="arrl" size={10}/>{STAGES[si-1]}</button>}
+                      {si>0&&<button onClick={function(){onMove(item.id,STAGES[si-1]);}} style={{background:'rgba(148,163,184,.08)',border:'1px solid var(--c-border2)',borderRadius:5,padding:'3px 7px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:3,fontSize:10.5}}><Ico n="arrl" size={10}/>{STAGES[si-1]}</button>}
                       {si<STAGES.length-1&&<button onClick={function(){onMove(item.id,STAGES[si+1]);}} style={{background:cfg.bg,border:'1px solid '+cfg.color+'28',borderRadius:5,padding:'3px 7px',color:cfg.color,display:'flex',alignItems:'center',gap:3,fontSize:10.5}}>{STAGES[si+1]}<Ico n="arrr" size={10}/></button>}
                     </div>
                     <div style={{display:'flex',gap:4}}>
@@ -1223,14 +1303,14 @@ function Kanban(props) {
                     </div>
                   </div>
                   {/* Pipeline dots */}
-                  <div style={{paddingTop:7,borderTop:'1px solid #1E3A5F'}}><PipeDots stage={item.status}/></div>
+                  <div style={{paddingTop:7,borderTop:'1px solid var(--c-border)'}}><PipeDots stage={item.status}/></div>
                 </div>
               );})}
             </div>
-            <div style={{padding:8,borderTop:'1px solid #1E293B',flexShrink:0}}>
-              <button onClick={function(){onAdd(stage);}} style={{width:'100%',padding:'6px',background:'transparent',border:'1px dashed #1E3A5F',borderRadius:7,color:'#334155',fontSize:11.5,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all .15s'}}
+            <div style={{padding:8,borderTop:'1px solid var(--c-border)',flexShrink:0}}>
+              <button onClick={function(){onAdd(stage);}} style={{width:'100%',padding:'6px',background:'transparent',border:'1px dashed #1E3A5F',borderRadius:7,color:'var(--c-ghost)',fontSize:11.5,display:'flex',alignItems:'center',justifyContent:'center',gap:4,transition:'all .15s'}}
                 onMouseEnter={function(e){e.currentTarget.style.borderColor=cfg.color+'60';e.currentTarget.style.color=cfg.color;}}
-                onMouseLeave={function(e){e.currentTarget.style.borderColor='#1E3A5F';e.currentTarget.style.color='#334155';}}>
+                onMouseLeave={function(e){e.currentTarget.style.borderColor='var(--c-border)';e.currentTarget.style.color='var(--c-ghost)';}}>
                 <Ico n="plus" size={11}/> Add here
               </button>
             </div>
@@ -1245,24 +1325,24 @@ function Kanban(props) {
 function SettingsView(props) {
   var currency=props.currency,setCurrency=props.setCurrency,categories=props.categories,onAddCat=props.onAddCat,onRemoveCat=props.onRemoveCat,onToast=props.onToast;
   var _nc=useState(''),newCat=_nc[0],setNewCat=_nc[1];
-  var card={background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,padding:'20px 22px',marginBottom:16};
+  var card={background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'20px 22px',marginBottom:16};
   async function addCat(){var c=newCat.trim();if(!c||categories.includes(c))return;await onAddCat(c);setNewCat('');onToast('Category "'+c+'" added');}
   return (
     <div style={{maxWidth:620}}>
       <div style={card}>
-        <div style={{fontSize:14,fontWeight:600,color:'#F1F5F9',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="dollar" size={14} color="#F59E0B"/> Display Currency</div>
-        <p style={{fontSize:12,color:'#475569',margin:'0 0 12px'}}>Set the global currency used across all project budgets.</p>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="dollar" size={14} color="#F59E0B"/> Display Currency</div>
+        <p style={{fontSize:12,color:'var(--c-text5)',margin:'0 0 12px'}}>Set the global currency used across all project budgets.</p>
         <select style={Object.assign({},INP,{width:180,cursor:'pointer'})} value={currency} onChange={function(e){setCurrency(e.target.value);onToast('Currency updated');}}>
           {['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'].map(function(c){return <option key={c} value={c}>{c}</option>;})}
         </select>
       </div>
       <div style={Object.assign({},card,{marginBottom:0})}>
-        <div style={{fontSize:14,fontWeight:600,color:'#F1F5F9',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="tag" size={14} color="#34D399"/> Equipment Categories</div>
-        <p style={{fontSize:12,color:'#475569',margin:'0 0 14px'}}>Manage categories available when adding equipment.</p>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="tag" size={14} color="#34D399"/> Equipment Categories</div>
+        <p style={{fontSize:12,color:'var(--c-text5)',margin:'0 0 14px'}}>Manage categories available when adding equipment.</p>
         <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
-          {categories.map(function(c,idx){return(<div key={c} style={{display:'flex',alignItems:'center',gap:6,background:'#0F172A',border:'1px solid #334155',borderRadius:8,padding:'5px 12px'}}>
-            <span style={{width:7,height:7,borderRadius:'50%',background:CC[idx%CC.length],flexShrink:0}}/><span style={{fontSize:12.5,color:'#94A3B8'}}>{c}</span>
-            {categories.length>2&&<button onClick={function(){onRemoveCat(c);onToast('Category removed','info');}} style={{background:'none',border:'none',color:'#475569',display:'flex',marginLeft:2}}><Ico n="x" size={11}/></button>}
+          {categories.map(function(c,idx){return(<div key={c} style={{display:'flex',alignItems:'center',gap:6,background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'5px 12px'}}>
+            <span style={{width:7,height:7,borderRadius:'50%',background:CC[idx%CC.length],flexShrink:0}}/><span style={{fontSize:12.5,color:'var(--c-text3)'}}>{c}</span>
+            {categories.length>2&&<button onClick={function(){onRemoveCat(c);onToast('Category removed','info');}} style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',marginLeft:2}}><Ico n="x" size={11}/></button>}
           </div>);})}
         </div>
         <div style={{display:'flex',gap:8}}>
@@ -1296,6 +1376,11 @@ function App() {
   var _ds=useState('Creation'),defStage=_ds[0],setDefStage=_ds[1];
   var _cu=useState('USD'),currency=_cu[0],setCurrency=_cu[1];
   var _ts=useState([]),toasts=_ts[0],setToasts=_ts[1];
+  /* ── Theme ─────────────────────────────────────────────────── */
+  var _th=useState(function(){try{return localStorage.getItem('pf-theme')||'dark';}catch(e){return'dark';}}),
+      theme=_th[0],setTheme=_th[1];
+  function toggleTheme(){setTheme(function(t){var n=t==='dark'?'light':'dark';try{localStorage.setItem('pf-theme',n);}catch(e){}return n;});}
+  useEffect(function(){document.documentElement.setAttribute('data-theme',theme);},[theme]);
 
   var toast=useCallback(function(msg,type){
     var id=Date.now()+Math.random();
@@ -1433,12 +1518,12 @@ function App() {
 
   /* Loading / auth gates */
   if(authLoading)return(
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#0F172A',flexDirection:'column',gap:14}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--c-bg)',flexDirection:'column',gap:14}}>
       <div style={{width:36,height:36,border:'3px solid #1E293B',borderTop:'3px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
-      <span style={{fontSize:13,color:'#475569'}}>Connecting…</span>
+      <span style={{fontSize:13,color:'var(--c-text5)'}}>Connecting…</span>
     </div>
   );
-  if(!DEMO&&!user)return <LoginPage onLogin={setUser}/>;
+  if(!DEMO&&!user)return <LoginPage onLogin={setUser} theme={theme} onToggleTheme={toggleTheme}/>;
 
   var selProj=projects.find(function(p){return p.id===pid;});
   var pageTitles={dashboard:'Overview Dashboard',projects:selProj?selProj.name:'Projects',team:'Team Members',settings:'Settings'};
@@ -1451,31 +1536,31 @@ function App() {
   ];
 
   return (
-    <div style={{display:'flex',height:'100vh',background:'#0F172A',overflow:'hidden'}}>
+    <div style={{display:'flex',height:'100vh',background:'var(--c-bg)',overflow:'hidden'}}>
 
       {/* Sidebar */}
-      <aside style={{width:212,minWidth:212,background:'#080F1E',borderRight:'1px solid #1E293B',display:'flex',flexDirection:'column'}}>
-        <div style={{padding:'18px 14px',borderBottom:'1px solid #1E293B'}}>
+      <aside style={{width:212,minWidth:212,background:'var(--c-sidebar)',borderRight:'1px solid var(--c-border)',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'18px 14px',borderBottom:'1px solid var(--c-border)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:34,height:34,borderRadius:9,background:'#F59E0B',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Ico n="package" size={16} color="#000"/></div>
-            <div><div style={{fontSize:13.5,fontWeight:700,color:'#F1F5F9'}}>ProcureFlow</div><div style={{fontSize:10,color:'#334155'}}>{DEMO?'Demo Mode':'Enterprise v2.1'}</div></div>
+            <div><div style={{fontSize:13.5,fontWeight:700,color:'var(--c-text1)'}}>ProcureFlow</div><div style={{fontSize:10,color:'var(--c-ghost)'}}>{DEMO?'Demo Mode':'Enterprise v2.1'}</div></div>
           </div>
         </div>
         <nav style={{padding:'14px 10px',flex:1,overflowY:'auto'}}>
-          <div style={{fontSize:9.5,color:'#334155',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',padding:'0 8px',marginBottom:8}}>Navigation</div>
+          <div style={{fontSize:9.5,color:'var(--c-ghost)',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',padding:'0 8px',marginBottom:8}}>Navigation</div>
           {NAV.map(function(n){
             var act=tab===n.id;
-            return(<button key={n.id} onClick={function(){setTab(n.id);if(n.id!=='projects')setPid(null);}} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:8,border:'none',marginBottom:2,textAlign:'left',background:act?'rgba(245,158,11,.1)':'transparent',color:act?'#F59E0B':'#64748B'}}>
+            return(<button key={n.id} onClick={function(){setTab(n.id);if(n.id!=='projects')setPid(null);}} style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 10px',borderRadius:8,border:'none',marginBottom:2,textAlign:'left',background:act?'rgba(245,158,11,.1)':'transparent',color:act?'#F59E0B':'var(--c-text4)'}}>
               <Ico n={n.icon} size={16}/>
               <span style={{fontSize:13,fontWeight:act?600:400}}>{n.label}</span>
               {act&&<span style={{marginLeft:'auto',width:5,height:5,borderRadius:'50%',background:'#F59E0B'}}/>}
             </button>);
           })}
           {projects.length>0&&(
-            <div style={{marginTop:14,paddingTop:10,borderTop:'1px solid #1E293B'}}>
-              <div style={{fontSize:9.5,color:'#334155',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',padding:'0 8px',marginBottom:8}}>Projects</div>
+            <div style={{marginTop:14,paddingTop:10,borderTop:'1px solid var(--c-border)'}}>
+              <div style={{fontSize:9.5,color:'var(--c-ghost)',fontWeight:700,letterSpacing:'1px',textTransform:'uppercase',padding:'0 8px',marginBottom:8}}>Projects</div>
               {projects.map(function(p){var act=pid===p.id&&tab==='projects';return(
-                <button key={p.id} onClick={function(){setTab('projects');setPid(p.id);}} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:'none',marginBottom:2,textAlign:'left',background:act?p.color+'14':'transparent',color:act?p.color:'#475569'}}>
+                <button key={p.id} onClick={function(){setTab('projects');setPid(p.id);}} style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:'none',marginBottom:2,textAlign:'left',background:act?p.color+'14':'transparent',color:act?p.color:'var(--c-text5)'}}>
                   <span style={{width:6,height:6,borderRadius:'50%',background:p.color,flexShrink:0}}/><span style={{fontSize:12,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:act?600:400}}>{p.name}</span>
                 </button>
               );})}
@@ -1483,16 +1568,16 @@ function App() {
           )}
         </nav>
         {/* User footer */}
-        <div style={{padding:'12px',borderTop:'1px solid #1E293B'}}>
+        <div style={{padding:'12px',borderTop:'1px solid var(--c-border)'}}>
           <div style={{display:'flex',alignItems:'center',gap:9}}>
             <div style={{width:30,height:30,borderRadius:'50%',background:'rgba(245,158,11,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#F59E0B',flexShrink:0}}>
               {DEMO?'DM':(user&&user.email?user.email[0].toUpperCase():'?')}
             </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:500,color:'#E2E8F0',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{DEMO?'Demo User':(user&&user.email?user.email:'User')}</div>
-              <div style={{fontSize:10,color:'#475569'}}>{DEMO?'Demo Mode':'Authenticated'}</div>
+              <div style={{fontSize:12,fontWeight:500,color:'var(--c-text2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{DEMO?'Demo User':(user&&user.email?user.email:'User')}</div>
+              <div style={{fontSize:10,color:'var(--c-text5)'}}>{DEMO?'Demo Mode':'Authenticated'}</div>
             </div>
-            {!DEMO&&<button onClick={handleLogout} title="Sign out" style={{background:'none',border:'none',color:'#475569',display:'flex',padding:4,flexShrink:0}}><Ico n="logout" size={14}/></button>}
+            {!DEMO&&<button onClick={handleLogout} title="Sign out" style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:4,flexShrink:0}}><Ico n="logout" size={14}/></button>}
           </div>
         </div>
       </aside>
@@ -1505,18 +1590,23 @@ function App() {
             <span><strong>Demo Mode</strong> — data is not saved. Replace <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_URL</code> and <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_ANON_KEY</code> in index.html to enable persistence.</span>
           </div>
         )}
-        <header style={{padding:'13px 24px',borderBottom:'1px solid #1E293B',display:'flex',alignItems:'center',justifyContent:'space-between',background:'#0A1628',flexShrink:0}}>
+        <header style={{padding:'13px 24px',borderBottom:'1px solid var(--c-border)',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--c-header)',flexShrink:0}}>
           <div>
-            <h1 style={{margin:0,fontSize:16,fontWeight:700,color:'#F1F5F9'}}>{pageTitles[tab]||pageTitle}</h1>
-            <p style={{margin:0,marginTop:2,fontSize:11.5,color:'#475569'}}>{pageSubs[tab]||''}</p>
+            <h1 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--c-text1)'}}>{pageTitles[tab]||pageTitle}</h1>
+            <p style={{margin:0,marginTop:2,fontSize:11.5,color:'var(--c-text5)'}}>{pageSubs[tab]||''}</p>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:9}}>
-            <button style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,padding:'7px 9px',color:'#475569',display:'flex'}}><Ico n="bell" size={15}/></button>
+            <button onClick={toggleTheme} title={theme==='dark'?'Switch to light mode':'Switch to dark mode'}
+              style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 9px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:6,fontSize:12.5}}>
+              <Ico n={theme==='dark'?'sun':'moon'} size={15}/>
+              <span style={{fontSize:12,fontWeight:500}}>{theme==='dark'?'Light':'Dark'}</span>
+            </button>
+            <button style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 9px',color:'var(--c-text5)',display:'flex'}}><Ico n="bell" size={15}/></button>
             {tab==='projects'&&!pid&&<button onClick={function(){setEditProj(null);setShowProj(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> New Project</button>}
             {tab==='projects'&&pid&&<button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> Add Equipment</button>}          </div>
         </header>
         <main style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
-          {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'#475569',fontSize:13}}><div style={{width:20,height:20,border:'2px solid #1E293B',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading data…</div>}
+          {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid #1E293B',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading data…</div>}
           {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
           {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
           {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
