@@ -131,7 +131,13 @@ function fmt(v, cur) {
   return new Intl.NumberFormat('en-US',{style:'currency',currency:cur||'USD',maximumFractionDigits:0}).format(v);
 }
 function toApp(r) { return r ? Object.assign({}, r, {projectId: r.project_id}) : null; }
-function toDB(d)  { var r = Object.assign({}, d, {project_id: d.projectId}); delete r.projectId; return r; }
+function toDB(d)  {
+  var r = Object.assign({}, d, {project_id: d.projectId});
+  delete r.projectId;
+  delete r.deadline;      /* renamed to delivery_date in migration v2 */
+  delete r.total_cost;    /* computed field, not a DB column */
+  return r;
+}
 function uid()    { return 'id_' + Math.random().toString(36).slice(2) + Date.now(); }
 function initials(email, name) {
   if (name && name.trim()) {
@@ -952,11 +958,10 @@ function ItemModal(props) {
         qty:            q,
         unit_cost:      uc,
         cost:           q * uc,
-        deadline:       form.delivery_date || null,   /* original DB column */
         delivery_date:  form.delivery_date || null,
         lead_time_days: form.lead_time_days ? +form.lead_time_days : null,
         order_by_date:  ob || null,
-        id:             item ? item.id       : undefined,
+        id:             item ? item.id        : undefined,
         projectId:      item ? item.projectId : projectId,
       });
     } catch(e) {
