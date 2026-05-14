@@ -76,7 +76,7 @@ var useCallback = React.useCallback;
 /* ═══════════════════════════════════════════════════
    PASTE YOUR SUPABASE CREDENTIALS HERE
    ═══════════════════════════════════════════════════ */
-var SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co/';
+var SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1eHN4cWpndHJsZHFycW91bXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTMzMjIsImV4cCI6MjA5NDIyOTMyMn0.RnxrCXzTeXp3zXyBJt3-t6JQbp3dPTdQbkqqp_NKEvI';
 /* ═══════════════════════════════════════════════════ */
 
@@ -1443,16 +1443,32 @@ function App() {
 
   /* Item CRUD */
   async function saveItem(data){
-    /* data already has: qty, unit_cost, cost (total), delivery_date, lead_time_days, order_by_date */
     if(DEMO||!db){
-      if(data.id){setItems(function(p){return p.map(function(i){return i.id===data.id?Object.assign({},i,data):i;});});toast('Equipment updated');}
-      else{setItems(function(p){return p.concat([Object.assign({},data,{id:uid()})]);});toast('Equipment added');}
-    }else{
-      var row=toDB(data);
-      if(data.id){var r=await db.from('items').update(row).eq('id',data.id).select().single();if(r.data)setItems(function(p){return p.map(function(i){return i.id===data.id?toApp(r.data):i;});});toast('Equipment updated');}
-      else{var d=Object.assign({},row);delete d.id;var r2=await db.from('items').insert(d).select().single();if(r2.data)setItems(function(p){return p.concat([toApp(r2.data)]);});toast('Equipment added');}
+      if(data.id){
+        setItems(function(p){return p.map(function(i){return i.id===data.id?Object.assign({},i,data):i;});});
+        toast('Equipment updated');
+      } else {
+        setItems(function(p){return p.concat([Object.assign({},data,{id:uid()})]);});
+        toast('Equipment added');
+      }
+      setShowItem(false); setEditItem(null);
+      return;
     }
-    setShowItem(false);setEditItem(null);
+    /* Live Supabase — throw on error so ItemModal catch block shows it */
+    var row = toDB(data);
+    if(data.id){
+      var r = await db.from('items').update(row).eq('id',data.id).select().single();
+      if(r.error) throw new Error(r.error.message);
+      setItems(function(p){return p.map(function(i){return i.id===data.id?toApp(r.data):i;});});
+      toast('Equipment updated');
+    } else {
+      var d2 = Object.assign({},row); delete d2.id;
+      var r2 = await db.from('items').insert(d2).select().single();
+      if(r2.error) throw new Error(r2.error.message);
+      setItems(function(p){return p.concat([toApp(r2.data)]);});
+      toast('Equipment added');
+    }
+    setShowItem(false); setEditItem(null);
   }
   async function deleteItem(id){if(!DEMO&&db)await db.from('items').delete().eq('id',id);setItems(function(p){return p.filter(function(i){return i.id!==id;});});toast('Equipment removed','info');}
   async function moveItem(id,status){if(!DEMO&&db)await db.from('items').update({status:status}).eq('id',id);setItems(function(p){return p.map(function(i){return i.id===id?Object.assign({},i,{status:status}):i;});});toast('Moved to '+status);}
