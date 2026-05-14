@@ -80,11 +80,11 @@ var DEMO_ITEMS = [
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_USERS = [
-  {id:'u1', email:'admin@company.com',   full_name:'John Doe',     role:'Admin',   avatar_color:'#F59E0B', created_at:'2026-01-01'},
-  {id:'u2', email:'alice@company.com',   full_name:'Alice Chen',   role:'Manager', avatar_color:'#3B82F6', created_at:'2026-01-15'},
-  {id:'u3', email:'bob@company.com',     full_name:'Bob Smith',    role:'Member',  avatar_color:'#A78BFA', created_at:'2026-02-01'},
-  {id:'u4', email:'sarah@company.com',   full_name:'Sarah Johnson',role:'Member',  avatar_color:'#34D399', created_at:'2026-02-14'},
-  {id:'u5', email:'michael@company.com', full_name:'Michael Park', role:'Viewer',  avatar_color:'#F87171', created_at:'2026-03-05'},
+  {id:'u1',email:'admin@company.com',   full_name:'John Doe',     role:'Admin',   avatar_color:'#F59E0B',department:'Operations',  phone:'+1 555-0101',is_active:true, created_at:'2026-01-01'},
+  {id:'u2',email:'alice@company.com',   full_name:'Alice Chen',   role:'Manager', avatar_color:'#3B82F6',department:'Procurement', phone:'+1 555-0102',is_active:true, created_at:'2026-01-15'},
+  {id:'u3',email:'bob@company.com',     full_name:'Bob Smith',    role:'Member',  avatar_color:'#A78BFA',department:'IT',          phone:'+1 555-0103',is_active:true, created_at:'2026-02-01'},
+  {id:'u4',email:'sarah@company.com',   full_name:'Sarah Johnson',role:'Member',  avatar_color:'#34D399',department:'Finance',     phone:'+1 555-0104',is_active:true, created_at:'2026-02-14'},
+  {id:'u5',email:'michael@company.com', full_name:'Michael Park', role:'Viewer',  avatar_color:'#F87171',department:'Logistics',   phone:'+1 555-0105',is_active:false,created_at:'2026-03-05'},
 ];
 
 /* ── Helpers ────────────────────────────────────────────────── */
@@ -140,6 +140,7 @@ var SVGP = {
   user:      '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   crown:     '<path d="M2 20h20"/><path d="M5 20V10l7-7 7 7v10"/>',
   refresh:   '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  copy:      '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
 };
 
 function Ico(props) {
@@ -319,9 +320,14 @@ function LoginPage(props) {
 }
 
 /* ── Edit Profile Modal ─────────────────────────────────────── */
+/* ── Edit Profile Modal ─────────────────────────────────────── */
 function EditProfileModal(props) {
   var u=props.user, onSave=props.onSave, onClose=props.onClose;
-  var _f=useState({full_name:u.full_name||'',role:u.role||'Member',avatar_color:u.avatar_color||'#3B82F6'});
+  var _f=useState({
+    full_name:u.full_name||'', role:u.role||'Member',
+    avatar_color:u.avatar_color||'#3B82F6',
+    department:u.department||'', phone:u.phone||'',
+  });
   var form=_f[0],setForm=_f[1];
   var _s=useState(false),saving=_s[0],setSaving=_s[1];
   function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
@@ -332,41 +338,43 @@ function EditProfileModal(props) {
     setSaving(false);
   }
 
-  var footer=(
-    <div style={{display:'flex',gap:9}}>
-      <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
-      <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-        <Ico n="save" size={13}/>{saving?'Saving…':'Save Changes'}
-      </button>
-    </div>
-  );
+  var DEPTS=['Engineering','Finance','IT','Legal','Logistics','Marketing','Operations','Procurement','HR','Other'];
 
   return (
-    <Modal title="Edit Team Member" onClose={onClose} w={420} footer={footer}>
-      <div style={{display:'flex',flexDirection:'column',gap:14}}>
-        <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:'#0F172A',borderRadius:10,border:'1px solid #334155'}}>
-          <div style={{width:48,height:48,borderRadius:'50%',background:form.avatar_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,fontWeight:700,color:'#fff',flexShrink:0}}>
-            {initials(u.email, form.full_name)}
-          </div>
-          <div>
-            <div style={{fontSize:13.5,fontWeight:600,color:'#F1F5F9'}}>{u.email}</div>
-            <div style={{fontSize:11.5,color:'#475569',marginTop:2}}>User ID: {u.id.slice(0,16)}…</div>
-          </div>
+    <Modal title="Edit Team Member" onClose={onClose} w={480}
+      footer={<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="save" size={13}/>{saving?'Saving…':'Save Changes'}
+        </button>
+      </div>}>
+      {/* Avatar preview */}
+      <div style={{display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:'#0F172A',borderRadius:10,border:'1px solid #334155',marginBottom:16}}>
+        <div style={{width:52,height:52,borderRadius:'50%',background:form.avatar_color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700,color:'#fff',flexShrink:0,boxShadow:'0 0 0 3px '+form.avatar_color+'40'}}>
+          {initials(u.email,form.full_name)}
         </div>
-        <div>
-          <label style={LBL}>Full Name</label>
-          <input style={INP} value={form.full_name} onChange={function(e){set('full_name',e.target.value);}} placeholder="e.g. John Doe"/>
-        </div>
+        <div><div style={{fontSize:13.5,fontWeight:600,color:'#F1F5F9'}}>{u.email}</div><div style={{fontSize:11.5,color:'#475569',marginTop:2}}>ID: {String(u.id).slice(0,18)}…</div></div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Full Name</label><input style={INP} value={form.full_name} onChange={function(e){set('full_name',e.target.value);}} placeholder="e.g. Jane Smith"/></div>
         <div>
           <label style={LBL}>Role</label>
           <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.role} onChange={function(e){set('role',e.target.value);}}>
-            {ROLES.map(function(r){return <option key={r} value={r}>{r}</option>;})}
+            {ROLES.map(function(r){return <option key={r} value={r}>{r}</option>;} )}
           </select>
         </div>
         <div>
+          <label style={LBL}>Department</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.department} onChange={function(e){set('department',e.target.value);}}>
+            <option value="">— Select —</option>
+            {DEPTS.map(function(d){return <option key={d} value={d}>{d}</option>;} )}
+          </select>
+        </div>
+        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Phone</label><input style={INP} value={form.phone} onChange={function(e){set('phone',e.target.value);}} placeholder="+1 555-0100"/></div>
+        <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Avatar Colour</label>
           <div style={{display:'flex',gap:9}}>
-            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>;} )}
+            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:30,height:30,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid #F1F5F9':'3px solid transparent',transition:'border .15s'}}/>;} )}
           </div>
         </div>
       </div>
@@ -374,151 +382,383 @@ function EditProfileModal(props) {
   );
 }
 
+/* ── Add User Modal ─────────────────────────────────────────── */
+function AddUserModal(props) {
+  var onSave=props.onSave, onClose=props.onClose;
+  var _f=useState({email:'',full_name:'',role:'Member',department:'',password:'',avatar_color:PC[Math.floor(Math.random()*PC.length)]});
+  var form=_f[0],setForm=_f[1];
+  var _e=useState(''),error=_e[0],setError=_e[1];
+  var _s=useState(false),saving=_s[0],setSaving=_s[1];
+  var _sh=useState(false),showPw=_sh[0],setShowPw=_sh[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+  var DEPTS=['Engineering','Finance','IT','Legal','Logistics','Marketing','Operations','Procurement','HR','Other'];
+
+  async function submit(){
+    if(!form.email.trim())return setError('Email is required.');
+    if(!form.email.includes('@'))return setError('Please enter a valid email.');
+    if(!form.password||form.password.length<6)return setError('Password must be at least 6 characters.');
+    setError('');setSaving(true);
+    try{ await onSave(form); }
+    catch(e){ setError(e.message||'Failed to create user.'); setSaving(false); return; }
+    setSaving(false);
+  }
+
+  return (
+    <Modal title="Add New User" onClose={onClose} w={480}
+      footer={<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="plus" size={13}/>{saving?'Creating…':'Create User'}
+        </button>
+      </div>}>
+      {/* Header note */}
+      <div style={{display:'flex',alignItems:'flex-start',gap:8,padding:'10px 12px',background:'rgba(96,165,250,.08)',border:'1px solid rgba(96,165,250,.2)',borderRadius:8,marginBottom:16}}>
+        <Ico n="shield" size={13} color="#60A5FA" style={{marginTop:1,flexShrink:0}}/>
+        <p style={{fontSize:12,color:'#64748B',lineHeight:1.6}}>The user will be created with the temporary password below. They can update it via <strong style={{color:'#94A3B8'}}>Settings → Reset Password</strong> after first login. Make sure <strong style={{color:'#94A3B8'}}>Confirm email</strong> is <strong style={{color:'#34D399'}}>OFF</strong> in Supabase Auth settings.</p>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Email Address *</label><input style={INP} type="email" value={form.email} onChange={function(e){set('email',e.target.value);setError('');}} placeholder="user@company.com"/></div>
+        <div style={{gridColumn:'1/-1'}}><label style={LBL}>Full Name</label><input style={INP} value={form.full_name} onChange={function(e){set('full_name',e.target.value);}} placeholder="e.g. Jane Smith"/></div>
+        <div>
+          <label style={LBL}>Role</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.role} onChange={function(e){set('role',e.target.value);}}>
+            {ROLES.map(function(r){return <option key={r} value={r}>{r}</option>;} )}
+          </select>
+        </div>
+        <div>
+          <label style={LBL}>Department</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.department} onChange={function(e){set('department',e.target.value);}}>
+            <option value="">— Select —</option>
+            {DEPTS.map(function(d){return <option key={d} value={d}>{d}</option>;} )}
+          </select>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Temporary Password *</label>
+          <div style={{position:'relative'}}>
+            <input style={Object.assign({},INP,{paddingRight:40})} type={showPw?'text':'password'} value={form.password} onChange={function(e){set('password',e.target.value);setError('');}} placeholder="Min. 6 characters"/>
+            <button onClick={function(){setShowPw(!showPw);}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:'#475569',display:'flex',padding:4}}>
+              <Ico n={showPw?'eyeoff':'eye'} size={14}/>
+            </button>
+          </div>
+        </div>
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Avatar Colour</label>
+          <div style={{display:'flex',gap:9}}>
+            {PC.map(function(c){return <button key={c} onClick={function(){set('avatar_color',c);}} style={{width:30,height:30,borderRadius:'50%',background:c,border:form.avatar_color===c?'3px solid #F1F5F9':'3px solid transparent'}}/>;} )}
+          </div>
+        </div>
+      </div>
+      {error&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.25)',borderRadius:8,fontSize:12.5,color:'#F87171',marginTop:14}}><Ico n="alert" size={13}/>{error}</div>}
+    </Modal>
+  );
+}
+
+/* ── Delete Confirm Modal ───────────────────────────────────── */
+function DeleteConfirmModal(props) {
+  var u=props.user, onConfirm=props.onConfirm, onClose=props.onClose;
+  var _s=useState(false),busy=_s[0],setBusy=_s[1];
+  var aColor=u.avatar_color||'#3B82F6';
+  return (
+    <Modal title="Remove User" onClose={onClose} w={420}
+      footer={<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={async function(){setBusy(true);await onConfirm(u.id);setBusy(false);}} disabled={busy}
+          style={{padding:'8px 20px',background:'#EF4444',border:'none',borderRadius:8,color:'#fff',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="trash" size={13}/>{busy?'Removing…':'Remove User'}
+        </button>
+      </div>}>
+      {/* User preview */}
+      <div style={{display:'flex',alignItems:'center',gap:12,padding:'14px 16px',background:'#0F172A',borderRadius:10,border:'1px solid #334155',marginBottom:14}}>
+        <div style={{width:42,height:42,borderRadius:'50%',background:aColor+'22',border:'2px solid '+aColor+'45',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:aColor,flexShrink:0}}>
+          {initials(u.email,u.full_name)}
+        </div>
+        <div><div style={{fontSize:13.5,fontWeight:600,color:'#F1F5F9'}}>{u.full_name||u.email}</div><div style={{fontSize:12,color:'#475569'}}>{u.email}</div></div>
+      </div>
+      <p style={{fontSize:13,color:'#94A3B8',lineHeight:1.65}}>
+        This will <strong style={{color:'#F87171'}}>remove {u.full_name||u.email} from the team directory</strong> and they will no longer appear in the Users list.
+      </p>
+      <div style={{display:'flex',alignItems:'flex-start',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.07)',border:'1px solid rgba(248,113,113,.2)',borderRadius:8,marginTop:12}}>
+        <Ico n="alert" size={13} color="#F87171" style={{marginTop:1,flexShrink:0}}/>
+        <p style={{fontSize:12,color:'#64748B',lineHeight:1.6}}>Their Supabase auth account remains intact. To fully delete the account, go to <strong style={{color:'#94A3B8'}}>Supabase Dashboard → Auth → Users</strong> and delete manually. In Demo Mode, this is local only.</p>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Reset Password Modal ───────────────────────────────────── */
+function ResetPasswordModal(props) {
+  var u=props.user, onConfirm=props.onConfirm, onClose=props.onClose;
+  var _s=useState(false),busy=_s[0],setBusy=_s[1];
+  var _d=useState(false),done=_d[0],setDone=_d[1];
+  return (
+    <Modal title="Send Password Reset" onClose={onClose} w={420}
+      footer={!done&&<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13}}>Cancel</button>
+        <button onClick={async function(){setBusy(true);await onConfirm(u.email);setBusy(false);setDone(true);}} disabled={busy}
+          style={{padding:'8px 20px',background:'#3B82F6',border:'none',borderRadius:8,color:'#fff',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="mail" size={13}/>{busy?'Sending…':'Send Reset Email'}
+        </button>
+      </div>}>
+      {!done ? (
+        <div>
+          <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',background:'#0F172A',borderRadius:10,border:'1px solid #334155',marginBottom:14}}>
+            <Ico n="mail" size={18} color="#60A5FA"/>
+            <div><div style={{fontSize:13,fontWeight:600,color:'#F1F5F9'}}>{u.full_name||u.email}</div><div style={{fontSize:12,color:'#475569'}}>{u.email}</div></div>
+          </div>
+          <p style={{fontSize:13,color:'#94A3B8',lineHeight:1.65}}>A password reset link will be emailed to <strong style={{color:'#E2E8F0'}}>{u.email}</strong>. The link expires after 1 hour.</p>
+          {DEMO&&<div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(245,158,11,.08)',border:'1px solid rgba(245,158,11,.2)',borderRadius:8,marginTop:12,fontSize:12,color:'#F59E0B'}}><Ico n="alert" size={13}/> Demo Mode — no email will actually be sent.</div>}
+        </div>
+      ) : (
+        <div style={{textAlign:'center',padding:'20px 0'}}>
+          <div style={{width:52,height:52,borderRadius:'50%',background:'rgba(52,211,153,.12)',border:'2px solid rgba(52,211,153,.3)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}>
+            <Ico n="check" size={22} color="#34D399"/>
+          </div>
+          <div style={{fontSize:14,fontWeight:600,color:'#F1F5F9',marginBottom:6}}>Reset email sent!</div>
+          <div style={{fontSize:13,color:'#475569'}}>Password reset link sent to <strong style={{color:'#E2E8F0'}}>{u.email}</strong></div>
+          <button onClick={onClose} style={{marginTop:18,padding:'9px 24px',background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:13,cursor:'pointer'}}>Close</button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 /* ── Team View ──────────────────────────────────────────────── */
 function TeamView(props) {
-  var users=props.users, currentUser=props.currentUser, onUpdate=props.onUpdate, onToast=props.onToast;
+  var users=props.users, currentUser=props.currentUser;
+  var onAdd=props.onAdd, onUpdate=props.onUpdate, onDelete=props.onDelete;
+  var onReset=props.onReset, onToggleActive=props.onToggleActive, onToast=props.onToast;
+
   var _q=useState(''),q=_q[0],setQ=_q[1];
   var _rf=useState('All'),rf=_rf[0],setRf=_rf[1];
+  var _sf=useState('All'),sf=_sf[0],setSf=_sf[1];
   var _eu=useState(null),editUser=_eu[0],setEditUser=_eu[1];
+  var _du=useState(null),deleteUser=_du[0],setDeleteUser=_du[1];
+  var _ru=useState(null),resetUser=_ru[0],setResetUser=_ru[1];
 
   var filtered=useMemo(function(){
     return users.filter(function(u){
-      var matchQ=!q||u.email.toLowerCase().includes(q.toLowerCase())||(u.full_name&&u.full_name.toLowerCase().includes(q.toLowerCase()));
+      var matchQ=!q||(u.email||'').toLowerCase().includes(q.toLowerCase())||((u.full_name||'').toLowerCase().includes(q.toLowerCase()));
       var matchR=rf==='All'||u.role===rf;
-      return matchQ&&matchR;
+      var matchS=sf==='All'||(sf==='Active'&&u.is_active!==false)||(sf==='Inactive'&&u.is_active===false);
+      return matchQ&&matchR&&matchS;
     });
-  },[users,q,rf]);
+  },[users,q,rf,sf]);
 
   var roleCounts=useMemo(function(){
-    var m={};
+    var m={All:users.length};
     ROLES.forEach(function(r){m[r]=users.filter(function(u){return u.role===r;}).length;});
     return m;
   },[users]);
 
-  async function handleSave(updated) {
-    await onUpdate(updated);
-    setEditUser(null);
-    onToast('Profile updated');
+  var activeCount=users.filter(function(u){return u.is_active!==false;}).length;
+
+  async function handleSave(updated){await onUpdate(updated);setEditUser(null);onToast('Profile updated');}
+  async function handleDelete(id){await onDelete(id);setDeleteUser(null);onToast('User removed','info');}
+  async function handleReset(email){await onReset(email);}
+
+  function copyEmail(email){
+    if(navigator.clipboard){navigator.clipboard.writeText(email).then(function(){onToast('Email copied');});}
+    else{onToast('Copy not supported in this browser','warning');}
   }
+
+  var TH={padding:'10px 16px',textAlign:'left',fontSize:10.5,color:'#475569',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',background:'#0A1628',whiteSpace:'nowrap'};
+  var STATUSES=['All','Active','Inactive'];
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
-      {/* Stats */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+
+      {/* Stat row */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:12}}>
         {[
-          {label:'Total Users',    value:users.length,              color:'#3B82F6', icon:'team'},
-          {label:'Admins',         value:(roleCounts.Admin||0),     color:'#F59E0B', icon:'shield'},
-          {label:'Managers',       value:(roleCounts.Manager||0),   color:'#60A5FA', icon:'user'},
-          {label:'Members/Viewers',value:((roleCounts.Member||0)+(roleCounts.Viewer||0)), color:'#34D399', icon:'team'},
-        ].map(function(c){
+          {label:'Total Users',    value:users.length,            color:'#60A5FA', icon:'team'},
+          {label:'Active',         value:activeCount,             color:'#34D399', icon:'check'},
+          {label:'Inactive',       value:users.length-activeCount,color:'#F87171', icon:'x'},
+        ].concat(ROLES.slice(0,2).map(function(r){return{label:r+'s',value:roleCounts[r]||0,color:ROLE_CFG[r]?ROLE_CFG[r].color:'#94A3B8',icon:'user'};}))
+        .map(function(c){
           return (
-            <div key={c.label} style={{background:'#1E293B',borderRadius:12,border:'1px solid #1E3A5F',padding:'18px 20px'}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                <span style={{fontSize:10.5,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px'}}>{c.label}</span>
-                <div style={{width:28,height:28,borderRadius:7,background:c.color+'18',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  <Ico n={c.icon} size={13} color={c.color}/>
-                </div>
+            <div key={c.label} style={{background:'#1E293B',borderRadius:12,border:'1px solid #1E3A5F',padding:'14px 16px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+                <span style={{fontSize:10,color:'#64748B',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>{c.label}</span>
+                <div style={{width:24,height:24,borderRadius:6,background:c.color+'18',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n={c.icon} size={11} color={c.color}/></div>
               </div>
-              <div style={{fontSize:28,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{c.value}</div>
+              <div style={{fontSize:26,fontWeight:700,color:'#F1F5F9',lineHeight:1}}>{c.value}</div>
             </div>
           );
         })}
       </div>
 
-      {/* Filters */}
+      {/* Toolbar */}
       <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <div style={{flex:1,minWidth:200,position:'relative'}}>
-          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',display:'flex'}}>
-            <Ico n="search" size={13} color="#475569"/>
-          </div>
+        <div style={{flex:1,minWidth:180,position:'relative'}}>
+          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',display:'flex'}}><Ico n="search" size={13} color="#475569"/></div>
           <input value={q} onChange={function(e){setQ(e.target.value);}} placeholder="Search by name or email…"
             style={{width:'100%',paddingLeft:32,paddingRight:12,paddingTop:8,paddingBottom:8,background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#E2E8F0',fontSize:13}}/>
         </div>
-        <select value={rf} onChange={function(e){setRf(e.target.value);}} style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
+        <select value={rf} onChange={function(e){setRf(e.target.value);}}
+          style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
           <option value="All">All Roles</option>
-          {ROLES.map(function(r){return <option key={r} value={r}>{r}</option>;})}
+          {ROLES.map(function(r){return <option key={r} value={r}>{r}</option>;} )}
+        </select>
+        <select value={sf} onChange={function(e){setSf(e.target.value);}}
+          style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,color:'#94A3B8',fontSize:12.5,padding:'8px 12px',cursor:'pointer'}}>
+          {STATUSES.map(function(s){return <option key={s} value={s}>{s==='All'?'All Status':s}</option>;} )}
         </select>
         <span style={{fontSize:12,color:'#475569',whiteSpace:'nowrap'}}>{filtered.length} user{filtered.length!==1?'s':''}</span>
+        <button onClick={onAdd} style={{marginLeft:'auto',background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 14px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:5,whiteSpace:'nowrap'}}>
+          <Ico n="plus" size={13}/> Add User
+        </button>
       </div>
 
-      {/* User table */}
+      {/* Table */}
       <div style={{background:'#1E293B',border:'1px solid #1E3A5F',borderRadius:12,overflow:'hidden'}}>
-        {/* Table header */}
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr auto',gap:0,padding:'10px 20px',background:'#0A1628',borderBottom:'1px solid #334155'}}>
-          {['User','Role','Joined','Last activity',''].map(function(h,i){
-            return <div key={i} style={{fontSize:10.5,fontWeight:600,color:'#475569',textTransform:'uppercase',letterSpacing:'.6px'}}>{h}</div>;
-          })}
-        </div>
+        {!filtered.length&&<div style={{padding:'32px 20px',textAlign:'center',color:'#475569',fontSize:13}}>No users match your filter.</div>}
+        {filtered.length>0&&(
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
+              <thead>
+                <tr>
+                  {['User','Role','Department','Status','Joined','Actions'].map(function(h,i){
+                    return <th key={h} style={Object.assign({},TH,{paddingLeft:i===0?20:TH.padding})}>{h}</th>;
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(function(u, idx){
+                  var isMe=currentUser&&u.id===currentUser.id;
+                  var rCfg=ROLE_CFG[u.role]||{color:'#94A3B8',bg:'rgba(148,163,184,.12)'};
+                  var aColor=u.avatar_color||PC[idx%PC.length];
+                  var active=u.is_active!==false;
+                  return (
+                    <tr key={u.id} style={{borderTop:idx>0?'1px solid #1E3A5F':'none',background:isMe?'rgba(245,158,11,.03)':(!active?'rgba(248,113,113,.02)':'transparent')}}
+                      onMouseEnter={function(e){e.currentTarget.style.background=isMe?'rgba(245,158,11,.06)':'rgba(255,255,255,.025)';}}
+                      onMouseLeave={function(e){e.currentTarget.style.background=isMe?'rgba(245,158,11,.03)':(!active?'rgba(248,113,113,.02)':'transparent');}}>
 
-        {/* Rows */}
-        {!filtered.length&&(
-          <div style={{padding:'32px 20px',textAlign:'center',color:'#475569',fontSize:13}}>No users match your filter.</div>
+                      {/* User */}
+                      <td style={{padding:'13px 16px',paddingLeft:20}}>
+                        <div style={{display:'flex',alignItems:'center',gap:11}}>
+                          <div style={{position:'relative',flexShrink:0}}>
+                            <div style={{width:38,height:38,borderRadius:'50%',background:aColor+(active?'22':'11'),border:'2px solid '+aColor+(active?'45':'22'),display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:active?aColor:aColor+'66'}}>
+                              {initials(u.email,u.full_name)}
+                            </div>
+                            {!active&&<div style={{position:'absolute',bottom:0,right:0,width:10,height:10,borderRadius:'50%',background:'#EF4444',border:'2px solid #1E293B'}}/>}
+                          </div>
+                          <div style={{minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                              <span style={{fontSize:13,fontWeight:600,color:active?'#F1F5F9':'#64748B',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                                {u.full_name||'—'}
+                              </span>
+                              {isMe&&<span style={{fontSize:9.5,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,.12)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(245,158,11,.25)',flexShrink:0}}>YOU</span>}
+                              {!active&&<span style={{fontSize:9.5,fontWeight:700,color:'#F87171',background:'rgba(248,113,113,.12)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(248,113,113,.25)',flexShrink:0}}>INACTIVE</span>}
+                            </div>
+                            <div style={{display:'flex',alignItems:'center',gap:6}}>
+                              <span style={{fontSize:12,color:'#475569',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.email}</span>
+                              <button onClick={function(){copyEmail(u.email);}} title="Copy email"
+                                style={{background:'none',border:'none',color:'#334155',display:'flex',padding:2,flexShrink:0,cursor:'pointer'}}
+                                onMouseEnter={function(e){e.currentTarget.style.color='#60A5FA';}}
+                                onMouseLeave={function(e){e.currentTarget.style.color='#334155';}}>
+                                <Ico n="copy" size={11}/>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Role */}
+                      <td style={{padding:'13px 16px'}}>
+                        <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:999,fontSize:11.5,fontWeight:500,color:rCfg.color,background:rCfg.bg,border:'1px solid '+rCfg.color+'30',whiteSpace:'nowrap'}}>
+                          <span style={{width:5,height:5,borderRadius:'50%',background:rCfg.color,flexShrink:0}}/>
+                          {u.role}
+                        </span>
+                      </td>
+
+                      {/* Department */}
+                      <td style={{padding:'13px 16px'}}>
+                        <span style={{fontSize:12.5,color:u.department?'#94A3B8':'#334155'}}>{u.department||'—'}</span>
+                      </td>
+
+                      {/* Status toggle */}
+                      <td style={{padding:'13px 16px'}}>
+                        <button onClick={function(){onToggleActive(u);}}
+                          title={(active?'Deactivate':'Activate')+' user'}
+                          style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:999,fontSize:11.5,fontWeight:500,cursor:'pointer',
+                            background:active?'rgba(52,211,153,.1)':'rgba(248,113,113,.1)',
+                            border:'1px solid '+(active?'rgba(52,211,153,.3)':'rgba(248,113,113,.3)'),
+                            color:active?'#34D399':'#F87171'
+                          }}>
+                          <span style={{width:6,height:6,borderRadius:'50%',background:active?'#34D399':'#F87171'}}/>
+                          {active?'Active':'Inactive'}
+                        </button>
+                      </td>
+
+                      {/* Joined */}
+                      <td style={{padding:'13px 16px'}}>
+                        <span style={{fontSize:12.5,color:'#64748B',whiteSpace:'nowrap'}}>{shortDate(u.created_at)}</span>
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{padding:'13px 16px',paddingRight:20}}>
+                        <div style={{display:'flex',gap:5,justifyContent:'flex-end'}}>
+                          {/* Edit */}
+                          <button onClick={function(){setEditUser(u);}} title="Edit profile"
+                            style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:6,padding:'5px 8px',color:'#60A5FA',display:'flex',alignItems:'center',gap:4,fontSize:11.5}}>
+                            <Ico n="edit" size={11}/>
+                          </button>
+                          {/* Reset password */}
+                          <button onClick={function(){setResetUser(u);}} title="Send password reset"
+                            style={{background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',borderRadius:6,padding:'5px 8px',color:'#A78BFA',display:'flex',alignItems:'center',gap:4,fontSize:11.5}}>
+                            <Ico n="lock" size={11}/>
+                          </button>
+                          {/* Delete */}
+                          {!isMe&&(
+                            <button onClick={function(){setDeleteUser(u);}} title="Remove user"
+                              style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:6,padding:'5px 8px',color:'#F87171',display:'flex',alignItems:'center',gap:4,fontSize:11.5}}>
+                              <Ico n="trash" size={11}/>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-        {filtered.map(function(u, idx){
-          var isMe = currentUser && u.id===currentUser.id;
-          var cfg  = ROLE_CFG[u.role]||ROLE_CFG.Member;
-          return (
-            <div key={u.id}
-              style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr auto',gap:0,padding:'13px 20px',borderBottom:idx<filtered.length-1?'1px solid #1E3A5F':'none',alignItems:'center',background:isMe?'rgba(245,158,11,.03)':'transparent'}}
-              onMouseEnter={function(e){e.currentTarget.style.background=isMe?'rgba(245,158,11,.05)':'rgba(255,255,255,.02)';}}
-              onMouseLeave={function(e){e.currentTarget.style.background=isMe?'rgba(245,158,11,.03)':'transparent';}}
-            >
-              {/* Avatar + info */}
-              <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0}}>
-                <div style={{width:36,height:36,borderRadius:'50%',background:u.avatar_color||'#3B82F6',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0,border:isMe?'2px solid #F59E0B':'2px solid transparent'}}>
-                  {initials(u.email,u.full_name)}
-                </div>
-                <div style={{minWidth:0}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
-                    <span style={{fontSize:13.5,fontWeight:600,color:'#F1F5F9',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {u.full_name||'—'}
-                    </span>
-                    {isMe&&<span style={{fontSize:10,fontWeight:700,color:'#F59E0B',background:'rgba(245,158,11,.12)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(245,158,11,.25)',flexShrink:0}}>YOU</span>}
-                  </div>
-                  <div style={{fontSize:12,color:'#475569',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{u.email}</div>
-                </div>
-              </div>
 
-              {/* Role badge */}
-              <div><RoleBadge role={u.role}/></div>
-
-              {/* Joined */}
-              <div style={{fontSize:12.5,color:'#64748B'}}>{shortDate(u.created_at)}</div>
-
-              {/* Last activity placeholder */}
-              <div style={{fontSize:12.5,color:'#334155'}}>—</div>
-
-              {/* Actions */}
-              <div style={{display:'flex',justifyContent:'flex-end'}}>
-                <button onClick={function(){setEditUser(u);}} title="Edit profile"
-                  style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:6,padding:'5px 9px',color:'#60A5FA',display:'flex',alignItems:'center',gap:4,fontSize:11.5}}>
-                  <Ico n="edit" size={11}/>Edit
-                </button>
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Footer */}
-        <div style={{padding:'10px 20px',borderTop:'1px solid #1E3A5F',background:'#0A1628',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span style={{fontSize:12,color:'#475569'}}>{users.length} registered user{users.length!==1?'s':''}</span>
-          <div style={{display:'flex',gap:8}}>
+        {/* Table footer */}
+        <div style={{padding:'10px 20px',borderTop:'1px solid #1E3A5F',background:'#0A1628',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+          <span style={{fontSize:12,color:'#475569'}}>{activeCount} active · {users.length-activeCount} inactive</span>
+          <div style={{display:'flex',gap:10}}>
             {ROLES.map(function(r){
               var cnt=roleCounts[r]||0;
-              if(!cnt) return null;
-              var cfg=ROLE_CFG[r];
-              return (
-                <div key={r} style={{display:'flex',alignItems:'center',gap:4,fontSize:11.5,color:cfg.color}}>
-                  <span style={{width:6,height:6,borderRadius:'50%',background:cfg.color}}/>
-                  {cnt} {r}{cnt!==1?'s':''}
-                </div>
-              );
+              if(!cnt)return null;
+              var cfg=ROLE_CFG[r]||{color:'#94A3B8'};
+              return <div key={r} style={{display:'flex',alignItems:'center',gap:4,fontSize:11.5,color:cfg.color}}>
+                <span style={{width:6,height:6,borderRadius:'50%',background:cfg.color}}/>{cnt} {r}
+              </div>;
             })}
           </div>
         </div>
       </div>
 
+      {/* Role guide */}
+      <div style={{background:'rgba(96,165,250,.04)',border:'1px solid rgba(96,165,250,.12)',borderRadius:10,padding:'12px 16px',display:'flex',alignItems:'flex-start',gap:10}}>
+        <Ico n="shield" size={14} color="#60A5FA" style={{marginTop:1,flexShrink:0}}/>
+        <div style={{fontSize:12.5,color:'#64748B',lineHeight:1.65}}>
+          <strong style={{color:'#94A3B8'}}>Role guide — </strong>
+          <strong style={{color:'#F59E0B'}}>Admin</strong>: full access &amp; user management ·{' '}
+          <strong style={{color:'#3B82F6'}}>Manager</strong>: create &amp; edit all projects ·{' '}
+          <strong style={{color:'#34D399'}}>Member</strong>: edit assigned projects ·{' '}
+          <strong style={{color:'#94A3B8'}}>Viewer</strong>: read-only.
+          {!DEMO&&<span style={{display:'block',marginTop:4}}>First-time admin setup — run in Supabase SQL Editor: <code style={{background:'rgba(255,255,255,.06)',padding:'1px 6px',borderRadius:4,fontSize:11}}>UPDATE profiles SET role = 'admin' WHERE email = 'your@email.com';</code></span>}
+          {DEMO&&<span style={{color:'#60A5FA',display:'block',marginTop:4}}>Demo Mode — changes are local only and not persisted.</span>}
+        </div>
+      </div>
+
+      {/* Modals */}
       {editUser&&<EditProfileModal user={editUser} onSave={handleSave} onClose={function(){setEditUser(null);}}/>}
+      {deleteUser&&<DeleteConfirmModal user={deleteUser} onConfirm={handleDelete} onClose={function(){setDeleteUser(null);}}/>}
+      {resetUser&&<ResetPasswordModal user={resetUser} onConfirm={handleReset} onClose={function(){setResetUser(null);}}/>}
     </div>
   );
 }
@@ -871,6 +1111,7 @@ function App() {
   var _pi=useState(null),pid=_pi[0],setPid=_pi[1];
   var _si=useState(false),showItem=_si[0],setShowItem=_si[1];
   var _sp=useState(false),showProj=_sp[0],setShowProj=_sp[1];
+  var _sau=useState(false),showAddUser=_sau[0],setShowAddUser=_sau[1];
   var _ei=useState(null),editItem=_ei[0],setEditItem=_ei[1];
   var _ep=useState(null),editProj=_ep[0],setEditProj=_ep[1];
   var _ds=useState('Creation'),defStage=_ds[0],setDefStage=_ds[1];
@@ -955,12 +1196,59 @@ function App() {
   async function addCat(name){if(!DEMO&&db)await db.from('categories').insert({name:name});setCats(function(p){return p.concat([name]);});}
   async function removeCat(name){if(!DEMO&&db)await db.from('categories').delete().eq('name',name);setCats(function(p){return p.filter(function(x){return x!==name;});});}
 
-  /* User update */
+  /* ── User CRUD ────────────────────────────────────────────── */
+  async function addUser(form) {
+    if(DEMO||!db){
+      /* Demo mode: just add to local state */
+      var nu={id:uid(),email:form.email,full_name:form.full_name||'',role:form.role||'Member',
+        avatar_color:form.avatar_color||'#3B82F6',department:form.department||'',phone:'',
+        is_active:true,created_at:new Date().toISOString()};
+      setUsers(function(p){return p.concat([nu]);});
+      toast('User added (demo — not saved to database)','info');
+      return;
+    }
+    /* Live: create auth user via signUp, then update profile */
+    var r=await db.auth.signUp({email:form.email.trim(),password:form.password});
+    if(r.error) throw new Error(r.error.message);
+    /* Wait a moment for trigger to create profile row */
+    await new Promise(function(res){setTimeout(res,800);});
+    var uid2=r.data&&r.data.user&&r.data.user.id;
+    if(uid2){
+      await db.from('profiles').update({
+        full_name:form.full_name||'',role:form.role||'viewer',
+        avatar_color:form.avatar_color||'#3B82F6',department:form.department||'',is_active:true
+      }).eq('id',uid2);
+      var fresh=await db.from('profiles').select('*').eq('id',uid2).single();
+      if(fresh.data) setUsers(function(p){return p.concat([fresh.data]);});
+    }
+    toast('User created');
+  }
+
   async function updateUser(data){
     if(!DEMO&&db){
-      await db.from('profiles').update({full_name:data.full_name, role:data.role}).eq('id',data.id);
+      await db.from('profiles').update({
+        full_name:data.full_name,role:data.role,avatar_color:data.avatar_color,
+        department:data.department,phone:data.phone,is_active:data.is_active
+      }).eq('id',data.id);
     }
     setUsers(function(p){return p.map(function(u){return u.id===data.id?Object.assign({},u,data):u;});});
+  }
+
+  async function deleteUser(id){
+    if(!DEMO&&db) await db.from('profiles').delete().eq('id',id);
+    setUsers(function(p){return p.filter(function(u){return u.id!==id;});});
+  }
+
+  async function resetPassword(email){
+    if(!DEMO&&db) await db.auth.resetPasswordForEmail(email,{redirectTo:window.location.href});
+    /* Toast is handled inside ResetPasswordModal after this resolves */
+  }
+
+  async function toggleActive(u){
+    var next=u.is_active===false?true:false;
+    if(!DEMO&&db) await db.from('profiles').update({is_active:next}).eq('id',u.id);
+    setUsers(function(p){return p.map(function(x){return x.id===u.id?Object.assign({},x,{is_active:next}):x;});});
+    toast((u.full_name||u.email)+' '+(next?'activated':'deactivated'),(next?'success':'info'));
   }
 
   /* Loading / auth gates */
@@ -1045,21 +1333,24 @@ function App() {
           <div style={{display:'flex',alignItems:'center',gap:9}}>
             <button style={{background:'#1E293B',border:'1px solid #334155',borderRadius:8,padding:'7px 9px',color:'#475569',display:'flex'}}><Ico n="bell" size={15}/></button>
             {tab==='projects'&&!pid&&<button onClick={function(){setEditProj(null);setShowProj(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> New Project</button>}
-            {tab==='projects'&&pid&&<button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> Add Equipment</button>}
-          </div>
+            {tab==='projects'&&pid&&<button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> Add Equipment</button>}          </div>
         </header>
         <main style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
           {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'#475569',fontSize:13}}><div style={{width:20,height:20,border:'2px solid #1E293B',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading data…</div>}
           {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
           {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
           {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
-          {tab==='team'&&<TeamView users={users} currentUser={user} onUpdate={updateUser} onToast={toast}/>}
+          {tab==='team'&&<TeamView users={users} currentUser={user}
+            onAdd={function(){setShowAddUser(true);}}
+            onUpdate={updateUser} onDelete={deleteUser}
+            onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
           {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} onToast={toast}/>}
         </main>
       </div>
 
       {showProj&&<ProjectModal project={editProj} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
       {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currency={currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
+      {showAddUser&&<AddUserModal onSave={async function(form){await addUser(form);setShowAddUser(false);}} onClose={function(){setShowAddUser(false);}}/>}
       <div style={{position:'fixed',bottom:20,right:20,display:'flex',flexDirection:'column',gap:8,zIndex:2000}}>
         {toasts.map(function(t){return <Toast key={t.id} message={t.message} type={t.type} onClose={function(){setToasts(function(p){return p.filter(function(x){return x.id!==t.id;});});}}/>;} )}
       </div>
