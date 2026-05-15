@@ -76,7 +76,7 @@ var useCallback = React.useCallback;
 /* ═══════════════════════════════════════════════════
    PASTE YOUR SUPABASE CREDENTIALS HERE
    ═══════════════════════════════════════════════════ */
-var SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co';
+var SUPABASE_URL      = 'https://vuxsxqjgtrldqrqoumwb.supabase.co/';
 var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ1eHN4cWpndHJsZHFycW91bXdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2NTMzMjIsImV4cCI6MjA5NDIyOTMyMn0.RnxrCXzTeXp3zXyBJt3-t6JQbp3dPTdQbkqqp_NKEvI';
 /* ═══════════════════════════════════════════════════ */
 
@@ -105,17 +105,32 @@ var DEMO_PROJECTS = [
   {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  color:'#F59E0B', currency:'SGD', created_at:'2026-02-01'},
   {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, color:'#A78BFA', currency:'USD', created_at:'2026-03-10'},
 ];
+var DEMO_CURRENCIES = [
+  {id:'c1', code:'USD', name:'US Dollar',         symbol:'$',   is_active:true},
+  {id:'c2', code:'EUR', name:'Euro',              symbol:'€',   is_active:true},
+  {id:'c3', code:'GBP', name:'British Pound',     symbol:'£',   is_active:true},
+  {id:'c4', code:'SGD', name:'Singapore Dollar',  symbol:'S$',  is_active:true},
+  {id:'c5', code:'AUD', name:'Australian Dollar', symbol:'A$',  is_active:true},
+  {id:'c6', code:'CAD', name:'Canadian Dollar',   symbol:'C$',  is_active:true},
+  {id:'c7', code:'JPY', name:'Japanese Yen',       symbol:'¥',   is_active:true},
+  {id:'c8', code:'CHF', name:'Swiss Franc',        symbol:'CHF', is_active:true},
+  {id:'c9', code:'CNY', name:'Chinese Yuan',       symbol:'¥',   is_active:true},
+  {id:'c10',code:'MYR', name:'Malaysian Ringgit',  symbol:'RM',  is_active:true},
+  {id:'c11',code:'HKD', name:'Hong Kong Dollar',   symbol:'HK$', is_active:true},
+  {id:'c12',code:'INR', name:'Indian Rupee',        symbol:'₹',   is_active:true},
+];
+
 var DEMO_ITEMS = [
-  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10'},
-  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27'},
-  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24'},
-  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16'},
-  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01'},
-  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10'},
-  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18'},
-  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20'},
-  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07'},
-  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16'},
+  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'USD',notes:'Confirm model XPS 9530 with 32GB RAM. Contact: sales@dell.com'},
+  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27',item_currency:'USD',notes:'Annual subscription. Renew before May 30.'},
+  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24',item_currency:'USD',notes:'Reserved instances. Region: ap-southeast-1.'},
+  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16',item_currency:'USD',notes:''},
+  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01',item_currency:'SGD',notes:'Includes 10 desks, 4 conference tables.'},
+  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'SGD',notes:''},
+  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18',item_currency:'SGD',notes:'Model: Leap V2. Colour: Black.'},
+  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20',item_currency:'USD',notes:'42U racks. Require raised floor installation.'},
+  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07',item_currency:'USD',notes:''},
+  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16',item_currency:'USD',notes:''},
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_USERS = [
@@ -158,7 +173,10 @@ function calcOrderBy(deliveryDate, leadDays) {
   d.setDate(d.getDate() - Math.max(0, +leadDays));
   return d.toISOString().split('T')[0];
 }
-function urgencyLabel(dateStr) {
+function urgencyLabel(dateStr, status) {
+  if (status === 'Received' || status === 'Delivered') {
+    return {color:'#34D399', label:'FULFILLED', fulfilled:true};
+  }
   if (!dateStr) return {color:'var(--c-text5)', label:'—'};
   var diff = (new Date(dateStr) - new Date()) / 86400000;
   if (diff < 0)  return {color:'#F87171', label:'OVERDUE'};
@@ -167,7 +185,16 @@ function urgencyLabel(dateStr) {
   if (diff < 30) return {color:'#FBBF24', label:'SOON'};
   return {color:'#34D399', label:'ON TRACK'};
 }
-var CURRENCIES = ['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'];
+/* Convert amount between currencies using fetched rates (all relative to USD) */
+function convert(amount, fromCode, toCode, rates) {
+  if (!rates || !fromCode || !toCode || fromCode === toCode) return amount;
+  var usdAmount = amount / (rates[fromCode] || 1);
+  return usdAmount * (rates[toCode] || 1);
+}
+function currencySymbol(code, currencyList) {
+  var found = (currencyList||[]).find(function(c){return c.code===code;});
+  return found ? found.symbol : code;
+}
 
 /* ── SVG icon paths ─────────────────────────────────────────── */
 var SVGP = {
@@ -205,6 +232,8 @@ var SVGP = {
   copy:      '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   sun:       '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
   moon:      '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+  globe:     '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  note:      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
 };
 
 function Ico(props) {
@@ -836,7 +865,9 @@ function TeamView(props) {
 
 /* ── Project Modal ──────────────────────────────────────────── */
 function ProjectModal(props) {
-  var project=props.project,onSave=props.onSave,onClose=props.onClose;
+  var project=props.project,onSave=props.onSave,onClose=props.onClose,currencies=props.currencies||[];
+  var activeCurs=currencies.filter(function(c){return c.is_active!==false;});
+  if(!activeCurs.length) activeCurs=[{code:'USD',name:'US Dollar',symbol:'$'}];
   var _f=useState(project||{name:'',description:'',budget:'',color:PC[0],currency:'USD'});
   var form=_f[0],setForm=_f[1];
   var _e=useState(''),error=_e[0],setError=_e[1];
@@ -868,8 +899,7 @@ function ProjectModal(props) {
           <div>
             <label style={LBL}>Currency</label>
             <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.currency||'USD'} onChange={function(e){set('currency',e.target.value);}}>
-              {CURRENCIES.map(function(c){return <option key={c} value={c}>{c}</option>;})}
-            </select>
+              {activeCurs.map(function(c){return <option key={c.code} value={c.code}>{c.code} — {c.name}</option>;})}            </select>
           </div>
         </div>
         <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -888,25 +918,29 @@ function ProjectModal(props) {
 /* ── Item Modal ─────────────────────────────────────────────── */
 function ItemModal(props) {
   var item=props.item, projectId=props.projectId, categories=props.categories;
-  var currency=props.currency, defStage=props.defStage, onSave=props.onSave, onClose=props.onClose;
+  var currencies=props.currencies, currency=props.currency, defStage=props.defStage, onSave=props.onSave, onClose=props.onClose;
 
-  /* Pre-populate from existing item — handle both field name conventions */
-  var initQty      = item ? (item.qty||1)            : 1;
-  var initUnitCost = item ? (item.unit_cost||item.cost||'') : '';
+  var activeCurs = (currencies||[]).filter(function(c){return c.is_active!==false;});
+  var defaultCur = item ? (item.item_currency||currency||'USD') : (currency||'USD');
+
+  var initQty      = item ? (item.qty||1)                     : 1;
+  var initUnitCost = item ? (item.unit_cost||item.cost||'')   : '';
   var initDelivery = item ? (item.delivery_date||item.deadline||'') : '';
-  var initLead     = item ? (item.lead_time_days||'') : '';
+  var initLead     = item ? (item.lead_time_days||'')         : '';
 
   var def = {
-    name:          item ? item.name           : '',
-    category:      item ? item.category       : (categories[0]||'Hardware'),
-    vendor:        item ? item.vendor         : '',
-    status:        item ? item.status         : (defStage||'Creation'),
+    name:          item ? item.name     : '',
+    category:      item ? item.category : (categories[0]||'Hardware'),
+    vendor:        item ? item.vendor   : '',
+    status:        item ? item.status   : (defStage||'Creation'),
+    item_currency: defaultCur,
     qty:           String(initQty),
     unit_cost:     initUnitCost==='' ? '' : String(initUnitCost),
     delivery_date: initDelivery,
     lead_time_days:initLead==='' ? '' : String(initLead),
     order_by_date: item ? (item.order_by_date||calcOrderBy(initDelivery,initLead)) : '',
     total_cost:    +initQty * (+initUnitCost||0),
+    notes:         item ? (item.notes||'') : '',
   };
 
   var _f=useState(def), form=_f[0], setForm=_f[1];
@@ -917,29 +951,24 @@ function ItemModal(props) {
     setForm(function(f) {
       var next = Object.assign({},f,{[k]:v});
       if (k==='qty'||k==='unit_cost') {
-        var q  = +(k==='qty'       ? v : next.qty)||0;
-        var uc = +(k==='unit_cost' ? v : next.unit_cost)||0;
-        next.total_cost = q * uc;
+        var q=+(k==='qty'?v:next.qty)||0, uc=+(k==='unit_cost'?v:next.unit_cost)||0;
+        next.total_cost = q*uc;
       }
       if (k==='delivery_date'||k==='lead_time_days') {
-        next.order_by_date = calcOrderBy(
-          k==='delivery_date'  ? v : next.delivery_date,
-          k==='lead_time_days' ? v : next.lead_time_days
-        );
+        next.order_by_date = calcOrderBy(k==='delivery_date'?v:next.delivery_date, k==='lead_time_days'?v:next.lead_time_days);
       }
       return next;
     });
   }
 
-  var qty      = Math.max(1, Math.round(+form.qty||1));
-  var unitCost = +form.unit_cost||0;
+  var qty       = Math.max(1, Math.round(+form.qty||1));
+  var unitCost  = +form.unit_cost||0;
   var totalCost = qty * unitCost;
-  var orderBy  = form.order_by_date || calcOrderBy(form.delivery_date, form.lead_time_days);
-  var urgency  = urgencyLabel(orderBy);
-  var CUR      = currency||'USD';
+  var orderBy   = form.order_by_date || calcOrderBy(form.delivery_date, form.lead_time_days);
+  var urgency   = urgencyLabel(orderBy, form.status);
+  var CUR       = form.item_currency || currency || 'USD';
 
   async function submit() {
-    /* Only name, vendor, and unit cost are hard required */
     if (!form.name.trim())  return setError('Item name is required.');
     if (!form.vendor.trim()) return setError('Vendor is required.');
     if (!form.unit_cost || isNaN(+form.unit_cost) || +form.unit_cost < 0)
@@ -948,19 +977,20 @@ function ItemModal(props) {
     try {
       var q  = Math.max(1, Math.round(+form.qty||1));
       var uc = Math.max(0, +form.unit_cost||0);
-      var ob = form.delivery_date && form.lead_time_days
-               ? calcOrderBy(form.delivery_date, form.lead_time_days) : null;
+      var ob = form.delivery_date && form.lead_time_days ? calcOrderBy(form.delivery_date, form.lead_time_days) : null;
       await onSave({
         name:           form.name.trim(),
         category:       form.category,
         vendor:         form.vendor.trim(),
         status:         form.status,
+        item_currency:  CUR,
         qty:            q,
         unit_cost:      uc,
         cost:           q * uc,
         delivery_date:  form.delivery_date || null,
         lead_time_days: form.lead_time_days ? +form.lead_time_days : null,
         order_by_date:  ob || null,
+        notes:          form.notes || null,
         id:             item ? item.id        : undefined,
         projectId:      item ? item.projectId : projectId,
       });
@@ -978,13 +1008,13 @@ function ItemModal(props) {
   </div>);
 
   return (
-    <Modal title={item?'Edit Equipment':'Add Equipment'} onClose={onClose} w={560} footer={footer}>
+    <Modal title={item?'Edit Equipment':'Add Equipment'} onClose={onClose} w={580} footer={footer}>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
 
         {/* Name */}
         <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Equipment / Item Name *</label>
-          <input style={INP} value={form.name} onChange={function(e){set('name',e.target.value); setError('');}} placeholder="e.g. Dell XPS Workstations"/>
+          <input style={INP} value={form.name} onChange={function(e){set('name',e.target.value);setError('');}} placeholder="e.g. Dell XPS Workstations"/>
         </div>
 
         {/* Category + Stage */}
@@ -1004,25 +1034,33 @@ function ItemModal(props) {
         {/* Vendor */}
         <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Vendor *</label>
-          <input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value); setError('');}} placeholder="e.g. Dell Technologies"/>
+          <input style={INP} value={form.vendor} onChange={function(e){set('vendor',e.target.value);setError('');}} placeholder="e.g. Dell Technologies"/>
         </div>
 
-        {/* Qty + Unit cost */}
+        {/* Currency + Qty */}
+        <div>
+          <label style={LBL}>Currency</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={CUR} onChange={function(e){set('item_currency',e.target.value);}}>
+            {activeCurs.map(function(c){return <option key={c.code} value={c.code}>{c.code} — {c.name}</option>;})}
+          </select>
+        </div>
         <div>
           <label style={LBL}>Quantity</label>
           <input style={INP} type="number" min="1" step="1" value={form.qty} onChange={function(e){set('qty',e.target.value);}} placeholder="1"/>
         </div>
-        <div>
+
+        {/* Unit cost */}
+        <div style={{gridColumn:'1/-1'}}>
           <label style={LBL}>Unit Cost ({CUR}) *</label>
-          <input style={INP} type="number" min="0" step="0.01" value={form.unit_cost} onChange={function(e){set('unit_cost',e.target.value); setError('');}} placeholder="0.00"/>
+          <input style={INP} type="number" min="0" step="0.01" value={form.unit_cost} onChange={function(e){set('unit_cost',e.target.value);setError('');}} placeholder="0.00"/>
         </div>
 
-        {/* Total cost — live computed */}
+        {/* Total cost (computed) */}
         <div style={{gridColumn:'1/-1'}}>
           <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div style={{fontSize:12,color:'var(--c-text5)'}}>
               Total Cost
-              {form.qty && form.unit_cost
+              {form.qty&&form.unit_cost
                 ? <span style={{color:'var(--c-ghost)',marginLeft:8}}>{qty} × {fmt(unitCost,CUR)}</span>
                 : null}
             </div>
@@ -1030,7 +1068,7 @@ function ItemModal(props) {
           </div>
         </div>
 
-        {/* Delivery date + Lead time (optional) */}
+        {/* Delivery + Lead time */}
         <div>
           <label style={LBL}>Delivery Date <span style={{color:'var(--c-ghost)',fontWeight:400}}>(optional)</span></label>
           <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.delivery_date} onChange={function(e){set('delivery_date',e.target.value);}}/>
@@ -1040,27 +1078,35 @@ function ItemModal(props) {
           <input style={INP} type="number" min="0" step="1" value={form.lead_time_days} onChange={function(e){set('lead_time_days',e.target.value);}} placeholder="e.g. 14"/>
         </div>
 
-        {/* Order by date — auto computed */}
+        {/* Order by (auto) */}
         <div style={{gridColumn:'1/-1'}}>
-          <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid '+(orderBy ? urgency.color+'40' : 'var(--c-border2)'),display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid '+(orderBy?urgency.color+'40':'var(--c-border2)'),display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div>
               <div style={{fontSize:10.5,color:'var(--c-text5)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:2}}>
                 Order By Date <span style={{color:'var(--c-ghost)',fontWeight:400,textTransform:'none',letterSpacing:0}}>(Delivery − Lead time)</span>
               </div>
-              <div style={{fontSize:16,fontWeight:700,color:orderBy ? urgency.color : 'var(--c-ghost)'}}>
+              <div style={{fontSize:16,fontWeight:700,color:orderBy?urgency.color:'var(--c-ghost)'}}>
                 {orderBy || '— fill Delivery Date and Lead Time above —'}
               </div>
             </div>
-            {orderBy && (
-              <span style={{fontSize:10,fontWeight:700,color:urgency.color,background:urgency.color+'15',padding:'3px 9px',borderRadius:999,border:'1px solid '+urgency.color+'30',whiteSpace:'nowrap'}}>
-                {urgency.label}
-              </span>
-            )}
+            {orderBy&&<span style={{fontSize:10,fontWeight:700,color:urgency.color,background:urgency.color+'15',padding:'3px 9px',borderRadius:999,border:'1px solid '+urgency.color+'30',whiteSpace:'nowrap'}}>{urgency.label}</span>}
           </div>
         </div>
 
+        {/* Notes */}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Notes <span style={{color:'var(--c-ghost)',fontWeight:400}}>(optional)</span></label>
+          <textarea
+            value={form.notes}
+            onChange={function(e){set('notes',e.target.value);}}
+            placeholder="Supplier contact, spec details, special instructions…"
+            rows={3}
+            style={Object.assign({},INP,{resize:'vertical',lineHeight:1.55,fontFamily:'inherit'})}
+          />
+        </div>
+
         {/* Error */}
-        {error && (
+        {error&&(
           <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.3)',borderRadius:8,fontSize:12.5,color:'#F87171'}}>
             <Ico n="alert" size={14}/>{error}
           </div>
@@ -1069,6 +1115,7 @@ function ItemModal(props) {
     </Modal>
   );
 }
+
 
 /* ── Dashboard ──────────────────────────────────────────────── */
 function Dashboard(props) {
@@ -1257,7 +1304,8 @@ function Kanban(props) {
               {!col.length&&<div style={{textAlign:'center',padding:'22px 8px',color:'var(--c-ghost)',fontSize:12,border:'1px dashed #1E3A5F',borderRadius:8,marginTop:4}}>No items</div>}
               {col.map(function(item){
                 var orderBy   = item.order_by_date || calcOrderBy(item.delivery_date||item.deadline, item.lead_time_days);
-                var urgency   = urgencyLabel(orderBy);
+                var urgency   = urgencyLabel(orderBy, item.status);
+                var itemCur   = item.item_currency || currency;
                 var totalCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
                 return(
                 <div key={item.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
@@ -1269,22 +1317,23 @@ function Kanban(props) {
                   <div style={{background:'var(--c-bg)',borderRadius:6,padding:'7px 9px',marginBottom:8}}>
                     {item.qty>1 ? (
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty} × {fmt(item.unit_cost||0,currency)}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,currency)}</span>
+                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty} × {fmt(item.unit_cost||0,itemCur)}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,itemCur)}</span>
                       </div>
                     ) : (
                       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                         <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.category}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,currency)}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,itemCur)}</span>
                       </div>
                     )}
                     {item.qty>1&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{item.category}</div>}
+                    {itemCur!==currency&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{itemCur} · project: {currency}</div>}
                   </div>
 
                   {/* Dates block */}
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5,marginBottom:8}}>
-                    {/* Order by */}
-                    <div style={{background:urgency.color+'10',borderRadius:6,padding:'5px 8px',border:'1px solid '+urgency.color+'25'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5,marginBottom:urgency.fulfilled?6:8}}>
+                    {/* Order by — green when fulfilled */}
+                    <div style={{background:urgency.color+'12',borderRadius:6,padding:'5px 8px',border:'1px solid '+urgency.color+(urgency.fulfilled?'55':'25')}}>
                       <div style={{fontSize:9,color:urgency.color,fontWeight:700,textTransform:'uppercase',letterSpacing:'.4px',marginBottom:2}}>Order By</div>
                       <div style={{fontSize:11.5,fontWeight:600,color:urgency.color}}>{orderBy||'—'}</div>
                     </div>
@@ -1294,7 +1343,11 @@ function Kanban(props) {
                       <div style={{fontSize:11.5,fontWeight:600,color:'var(--c-text3)'}}>{item.delivery_date||item.deadline||'—'}</div>
                     </div>
                   </div>
-                  {item.lead_time_days&&<div style={{fontSize:10.5,color:'var(--c-ghost)',marginBottom:8}}>Lead time: {item.lead_time_days} day{item.lead_time_days!==1?'s':''}</div>}
+                  {urgency.fulfilled&&<div style={{fontSize:10,color:'#34D399',marginBottom:6,display:'flex',alignItems:'center',gap:4}}><span style={{width:5,height:5,borderRadius:'50%',background:'#34D399'}}/>Ordered &amp; fulfilled on time</div>}
+                  {item.lead_time_days&&!urgency.fulfilled&&<div style={{fontSize:10.5,color:'var(--c-ghost)',marginBottom:8}}>Lead time: {item.lead_time_days} day{item.lead_time_days!==1?'s':''}</div>}
+
+                  {/* Notes */}
+                  {item.notes&&<div style={{fontSize:11,color:'var(--c-text5)',background:'var(--c-bg)',borderRadius:5,padding:'5px 8px',marginBottom:8,borderLeft:'2px solid var(--c-border2)',lineHeight:1.5,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{item.notes}</div>}
 
                   {/* Stage move + Edit/Delete */}
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -1328,31 +1381,188 @@ function Kanban(props) {
 
 /* ── Settings ───────────────────────────────────────────────── */
 function SettingsView(props) {
-  var currency=props.currency,setCurrency=props.setCurrency,categories=props.categories,onAddCat=props.onAddCat,onRemoveCat=props.onRemoveCat,onToast=props.onToast;
+  var currency=props.currency, setCurrency=props.setCurrency;
+  var currencies=props.currencies, onAddCurrency=props.onAddCurrency, onUpdateCurrency=props.onUpdateCurrency, onDeleteCurrency=props.onDeleteCurrency;
+  var categories=props.categories, onAddCat=props.onAddCat, onRemoveCat=props.onRemoveCat;
+  var rates=props.rates, ratesUpdated=props.ratesUpdated, onRefreshRates=props.onRefreshRates;
+  var onToast=props.onToast;
+
   var _nc=useState(''),newCat=_nc[0],setNewCat=_nc[1];
+  var _nCode=useState(''),nCode=_nCode[0],setNCode=_nCode[1];
+  var _nName=useState(''),nName=_nName[0],setNName=_nName[1];
+  var _nSym=useState(''),nSym=_nSym[0],setNSym=_nSym[1];
+  var _editId=useState(null),editId=_editId[0],setEditId=_editId[1];
+  var _editForm=useState({}),editForm=_editForm[0],setEditForm=_editForm[1];
+  var _rLoading=useState(false),rLoading=_rLoading[0],setRLoading=_rLoading[1];
+
   var card={background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'20px 22px',marginBottom:16};
+  var activeCurs = currencies.filter(function(c){return c.is_active!==false;});
+
   async function addCat(){var c=newCat.trim();if(!c||categories.includes(c))return;await onAddCat(c);setNewCat('');onToast('Category "'+c+'" added');}
+
+  async function addCurrency(){
+    var code=nCode.trim().toUpperCase(), name=nName.trim(), symbol=nSym.trim();
+    if(!code||!name||!symbol){onToast('Code, name and symbol are all required','warning');return;}
+    if(currencies.find(function(c){return c.code===code;})){onToast(code+' already exists','warning');return;}
+    await onAddCurrency({code:code,name:name,symbol:symbol,is_active:true});
+    setNCode('');setNName('');setNSym('');
+    onToast('Currency '+code+' added');
+  }
+
+  async function saveEdit(c){
+    await onUpdateCurrency(Object.assign({},c,editForm));
+    setEditId(null);setEditForm({});
+    onToast('Currency updated');
+  }
+
+  async function refreshRates(){
+    setRLoading(true);
+    await onRefreshRates();
+    setRLoading(false);
+    onToast('Exchange rates refreshed');
+  }
+
+  var TH={padding:'8px 12px',textAlign:'left',fontSize:10,color:'var(--c-text5)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',background:'var(--c-bg)'};
+
   return (
-    <div style={{maxWidth:620}}>
+    <div style={{maxWidth:680}}>
+
+      {/* ── Currency Manager ── */}
       <div style={card}>
-        <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="dollar" size={14} color="#F59E0B"/> Display Currency</div>
-        <p style={{fontSize:12,color:'var(--c-text5)',margin:'0 0 12px'}}>Set the global currency used across all project budgets.</p>
-        <select style={Object.assign({},INP,{width:180,cursor:'pointer'})} value={currency} onChange={function(e){setCurrency(e.target.value);onToast('Currency updated');}}>
-          {['USD','EUR','GBP','SGD','AUD','CAD','JPY','CHF'].map(function(c){return <option key={c} value={c}>{c}</option>;})}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+          <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',display:'flex',alignItems:'center',gap:8}}>
+            <Ico n="globe" size={14} color="#F59E0B"/> Currency Manager
+          </div>
+          <button onClick={refreshRates} disabled={rLoading}
+            style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:7,padding:'5px 11px',color:'#60A5FA',fontSize:12,display:'flex',alignItems:'center',gap:5,cursor:'pointer'}}>
+            <Ico n="refresh" size={12}/>{rLoading?'Refreshing…':'Refresh Rates'}
+          </button>
+        </div>
+        {ratesUpdated&&<p style={{fontSize:11,color:'var(--c-text5)',marginBottom:10}}>Live rates via exchangerate-api.com · Updated: {ratesUpdated}</p>}
+
+        {/* Live rates strip */}
+        {rates&&activeCurs.length>0&&(
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14,padding:'10px 12px',background:'var(--c-bg)',borderRadius:8,border:'1px solid var(--c-border)'}}>
+            {activeCurs.slice(0,8).map(function(c){
+              var rate = rates[c.code];
+              return rate ? (
+                <div key={c.code} style={{fontSize:11.5,color:'var(--c-text3)',background:'var(--c-surface)',padding:'3px 9px',borderRadius:6,border:'1px solid var(--c-border2)'}}>
+                  <strong style={{color:'#F59E0B'}}>1 USD</strong> = {rate.toFixed(c.code==='JPY'?0:4)} {c.code}
+                </div>
+              ) : null;
+            })}
+          </div>
+        )}
+
+        {/* Currency table */}
+        <div style={{border:'1px solid var(--c-border)',borderRadius:9,overflow:'hidden',marginBottom:16}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead>
+              <tr>
+                {['Code','Name','Symbol','Rate (USD)','Active','Actions'].map(function(h){
+                  return <th key={h} style={TH}>{h}</th>;
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {currencies.map(function(c,idx){
+                var isEdit = editId === c.id;
+                var rate = rates && rates[c.code] ? rates[c.code].toFixed(c.code==='JPY'?2:4) : '—';
+                return (
+                  <tr key={c.id} style={{borderTop:idx>0?'1px solid var(--c-border)':'none',background:c.is_active===false?'rgba(248,113,113,.03)':'transparent'}}>
+                    <td style={{padding:'9px 12px'}}>
+                      <span style={{fontSize:13,fontWeight:700,color:'#F59E0B',fontFamily:'monospace'}}>{c.code}</span>
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      {isEdit
+                        ? <input style={Object.assign({},INP,{padding:'5px 8px',fontSize:12.5,width:140})} value={editForm.name!==undefined?editForm.name:c.name} onChange={function(e){setEditForm(function(f){return Object.assign({},f,{name:e.target.value});});}}/>
+                        : <span style={{fontSize:12.5,color:'var(--c-text2)'}}>{c.name}</span>}
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      {isEdit
+                        ? <input style={Object.assign({},INP,{padding:'5px 8px',fontSize:12.5,width:60})} value={editForm.symbol!==undefined?editForm.symbol:c.symbol} onChange={function(e){setEditForm(function(f){return Object.assign({},f,{symbol:e.target.value});});}}/>
+                        : <span style={{fontSize:13,fontWeight:600,color:'var(--c-text3)'}}>{c.symbol}</span>}
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      <span style={{fontSize:12,color:'var(--c-text4)',fontFamily:'monospace'}}>{rate}</span>
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      <button onClick={async function(){await onUpdateCurrency(Object.assign({},c,{is_active:!c.is_active}));onToast(c.code+(c.is_active?' deactivated':' activated'),c.is_active?'info':'success');}}
+                        style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 9px',borderRadius:999,fontSize:11,fontWeight:500,cursor:'pointer',
+                          background:c.is_active!==false?'rgba(52,211,153,.1)':'rgba(248,113,113,.1)',
+                          border:'1px solid '+(c.is_active!==false?'rgba(52,211,153,.3)':'rgba(248,113,113,.3)'),
+                          color:c.is_active!==false?'#34D399':'#F87171'}}>
+                        <span style={{width:5,height:5,borderRadius:'50%',background:c.is_active!==false?'#34D399':'#F87171'}}/>
+                        {c.is_active!==false?'Active':'Off'}
+                      </button>
+                    </td>
+                    <td style={{padding:'9px 12px'}}>
+                      <div style={{display:'flex',gap:5}}>
+                        {isEdit ? (<>
+                          <button onClick={function(){saveEdit(c);}} style={{background:'rgba(52,211,153,.1)',border:'1px solid rgba(52,211,153,.25)',borderRadius:5,padding:'4px 8px',color:'#34D399',fontSize:11.5,display:'flex',alignItems:'center',gap:3}}>
+                            <Ico n="save" size={10}/>Save
+                          </button>
+                          <button onClick={function(){setEditId(null);setEditForm({});}} style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:5,padding:'4px 8px',color:'var(--c-text5)',fontSize:11.5}}>
+                            Cancel
+                          </button>
+                        </>) : (<>
+                          <button onClick={function(){setEditId(c.id);setEditForm({name:c.name,symbol:c.symbol});}}
+                            style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'4px 7px',color:'#60A5FA',display:'flex'}}><Ico n="edit" size={11}/></button>
+                          <button onClick={async function(){await onDeleteCurrency(c.id);onToast(c.code+' removed','info');}}
+                            style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex'}}><Ico n="trash" size={11}/></button>
+                        </>)}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Add new currency */}
+        <div style={{fontSize:12,fontWeight:600,color:'var(--c-text3)',marginBottom:8,textTransform:'uppercase',letterSpacing:'.5px'}}>Add Currency</div>
+        <div style={{display:'grid',gridTemplateColumns:'80px 1fr 70px auto',gap:8,alignItems:'flex-end'}}>
+          <div>
+            <label style={LBL}>Code</label>
+            <input style={INP} value={nCode} onChange={function(e){setNCode(e.target.value.toUpperCase().slice(0,4));}} placeholder="MYR" maxLength={4}/>
+          </div>
+          <div>
+            <label style={LBL}>Name</label>
+            <input style={INP} value={nName} onChange={function(e){setNName(e.target.value);}} placeholder="Malaysian Ringgit" onKeyDown={function(e){if(e.key==='Enter')addCurrency();}}/>
+          </div>
+          <div>
+            <label style={LBL}>Symbol</label>
+            <input style={INP} value={nSym} onChange={function(e){setNSym(e.target.value.slice(0,5));}} placeholder="RM" maxLength={5}/>
+          </div>
+          <button onClick={addCurrency} style={{padding:'9px 14px',background:'rgba(245,158,11,.12)',border:'1px solid rgba(245,158,11,.25)',borderRadius:8,color:'#F59E0B',fontSize:13,display:'flex',alignItems:'center',gap:5,cursor:'pointer',whiteSpace:'nowrap'}}>
+            <Ico n="plus" size={13}/> Add
+          </button>
+        </div>
+      </div>
+
+      {/* ── Default Display Currency ── */}
+      <div style={card}>
+        <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="dollar" size={14} color="#F59E0B"/> Default Display Currency</div>
+        <p style={{fontSize:12,color:'var(--c-text5)',margin:'0 0 12px'}}>Global fallback currency when a project or item has no currency selected.</p>
+        <select style={Object.assign({},INP,{width:220,cursor:'pointer'})} value={currency} onChange={function(e){setCurrency(e.target.value);onToast('Default currency updated');}}>
+          {activeCurs.map(function(c){return <option key={c.code} value={c.code}>{c.code} — {c.name}</option>;})}
         </select>
       </div>
+
+      {/* ── Equipment Categories ── */}
       <div style={Object.assign({},card,{marginBottom:0})}>
         <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="tag" size={14} color="#34D399"/> Equipment Categories</div>
         <p style={{fontSize:12,color:'var(--c-text5)',margin:'0 0 14px'}}>Manage categories available when adding equipment.</p>
         <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
           {categories.map(function(c,idx){return(<div key={c} style={{display:'flex',alignItems:'center',gap:6,background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'5px 12px'}}>
             <span style={{width:7,height:7,borderRadius:'50%',background:CC[idx%CC.length],flexShrink:0}}/><span style={{fontSize:12.5,color:'var(--c-text3)'}}>{c}</span>
-            {categories.length>2&&<button onClick={function(){onRemoveCat(c);onToast('Category removed','info');}} style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',marginLeft:2}}><Ico n="x" size={11}/></button>}
+            {categories.length>2&&<button onClick={function(){onRemoveCat(c);onToast('Category removed','info');}} style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',marginLeft:2,cursor:'pointer'}}><Ico n="x" size={11}/></button>}
           </div>);})}
         </div>
         <div style={{display:'flex',gap:8}}>
           <input style={Object.assign({},INP,{flex:1})} value={newCat} placeholder="New category…" onChange={function(e){setNewCat(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCat();}}/>
-          <button onClick={addCat} style={{padding:'9px 16px',background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.25)',borderRadius:8,color:'#34D399',fontSize:13,display:'flex',alignItems:'center',gap:6}}><Ico n="plusc" size={14}/> Add</button>
+          <button onClick={addCat} style={{padding:'9px 16px',background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.25)',borderRadius:8,color:'#34D399',fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}><Ico n="plusc" size={14}/> Add</button>
         </div>
       </div>
     </div>
@@ -1369,8 +1579,11 @@ function App() {
   var _pr=useState(DEMO_PROJECTS),projects=_pr[0],setProjects=_pr[1];
   var _it=useState(DEMO_ITEMS),items=_it[0],setItems=_it[1];
   var _ca=useState(DEMO_CATS),categories=_ca[0],setCats=_ca[1];
+  var _cr=useState(DEMO_CURRENCIES),currencies=_cr[0],setCurrencies=_cr[1];
   var _us=useState(DEMO_USERS),users=_us[0],setUsers=_us[1];
   var _dl=useState(false),dataLoading=_dl[0],setDataLoading=_dl[1];
+  var _rt=useState(null),rates=_rt[0],setRates=_rt[1];
+  var _ru=useState(''),ratesUpdated=_ru[0],setRatesUpdated=_ru[1];
   var _tb=useState('dashboard'),tab=_tb[0],setTab=_tb[1];
   var _pi=useState(null),pid=_pi[0],setPid=_pi[1];
   var _si=useState(false),showItem=_si[0],setShowItem=_si[1];
@@ -1386,6 +1599,19 @@ function App() {
       theme=_th[0],setTheme=_th[1];
   function toggleTheme(){setTheme(function(t){var n=t==='dark'?'light':'dark';try{localStorage.setItem('pf-theme',n);}catch(e){}return n;});}
   useEffect(function(){document.documentElement.setAttribute('data-theme',theme);},[theme]);
+
+  /* ── Live exchange rates (free, no key required) ────────────── */
+  async function fetchRates() {
+    try {
+      var res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+      var data = await res.json();
+      if (data && data.rates) {
+        setRates(data.rates);
+        setRatesUpdated(new Date().toLocaleTimeString());
+      }
+    } catch(e) { console.warn('Exchange rate fetch failed:', e.message); }
+  }
+  useEffect(function(){ fetchRates(); },[]);
 
   var toast=useCallback(function(msg,type){
     var id=Date.now()+Math.random();
@@ -1413,11 +1639,13 @@ function App() {
       db.from('items').select('*').order('created_at'),
       db.from('categories').select('*').order('name'),
       db.from('profiles').select('*').order('created_at'),
+      db.from('currencies').select('*').order('code'),
     ]).then(function(res){
       if(!res[0].error&&res[0].data)setProjects(res[0].data);
       if(!res[1].error&&res[1].data)setItems(res[1].data.map(toApp));
       if(!res[2].error&&res[2].data&&res[2].data.length)setCats(res[2].data.map(function(x){return x.name;}));
       if(!res[3].error&&res[3].data)setUsers(res[3].data);
+      if(!res[4].error&&res[4].data&&res[4].data.length)setCurrencies(res[4].data);
       setDataLoading(false);
     }).catch(function(e){console.error('Load error:',e);setDataLoading(false);});
   },[user]);
@@ -1503,6 +1731,28 @@ function App() {
   /* Category CRUD */
   async function addCat(name){if(!DEMO&&db)await db.from('categories').insert({name:name});setCats(function(p){return p.concat([name]);});}
   async function removeCat(name){if(!DEMO&&db)await db.from('categories').delete().eq('name',name);setCats(function(p){return p.filter(function(x){return x!==name;});});}
+
+  /* Currency CRUD */
+  async function addCurrency(data){
+    if(!DEMO&&db){
+      var r=await db.from('currencies').insert({code:data.code,name:data.name,symbol:data.symbol,is_active:true}).select().single();
+      if(r.error){toast('Failed: '+r.error.message,'error');return;}
+      setCurrencies(function(p){return p.concat([r.data]);});
+    } else {
+      setCurrencies(function(p){return p.concat([Object.assign({},data,{id:uid(),created_at:new Date().toISOString()})]);});
+    }
+  }
+  async function updateCurrency(data){
+    if(!DEMO&&db){
+      var payload={name:data.name,symbol:data.symbol,is_active:data.is_active};
+      await db.from('currencies').update(payload).eq('id',data.id);
+    }
+    setCurrencies(function(p){return p.map(function(c){return c.id===data.id?Object.assign({},c,data):c;});});
+  }
+  async function deleteCurrency(id){
+    if(!DEMO&&db)await db.from('currencies').delete().eq('id',id);
+    setCurrencies(function(p){return p.filter(function(c){return c.id!==id;});});
+  }
 
   /* ── User CRUD ────────────────────────────────────────────── */
   async function addUser(form) {
@@ -1657,12 +1907,18 @@ function App() {
             onAdd={function(){setShowAddUser(true);}}
             onUpdate={updateUser} onDelete={deleteUser}
             onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
-          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} onToast={toast}/>}
+          {tab==='settings'&&<SettingsView
+            currency={currency} setCurrency={setCurrency}
+            currencies={currencies}
+            onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency}
+            categories={categories} onAddCat={addCat} onRemoveCat={removeCat}
+            rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates}
+            onToast={toast}/>}
         </main>
       </div>
 
-      {showProj&&<ProjectModal project={editProj} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
-      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currency={selProj?selProj.currency||currency:currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
+      {showProj&&<ProjectModal project={editProj} currencies={currencies} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
+      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currencies={currencies} currency={selProj?selProj.currency||currency:currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
       {showAddUser&&<AddUserModal onSave={async function(form){await addUser(form);setShowAddUser(false);}} onClose={function(){setShowAddUser(false);}}/>}
       <div style={{position:'fixed',bottom:20,right:20,display:'flex',flexDirection:'column',gap:8,zIndex:2000}}>
         {toasts.map(function(t){return <Toast key={t.id} message={t.message} type={t.type} onClose={function(){setToasts(function(p){return p.filter(function(x){return x.id!==t.id;});});}}/>;} )}
