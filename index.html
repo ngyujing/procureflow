@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="ProcureFlow"/>
 <title>ProcureFlow</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23F59E0B'/%3E%3Cg stroke='%23000' stroke-width='9' stroke-linecap='round' stroke-linejoin='round' fill='none'%3E%3Cpath d='M124 60L90 40 56 60v40l34 20 34-20z'/%3E%3Cline x1='90' y1='40' x2='90' y2='120'/%3E%3Cline x1='56' y1='60' x2='124' y2='60'/%3E%3C/g%3E%3C/svg%3E"/>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23F59E0B'/%3E%3Cg stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' fill='none'%3E%3Cpath d='M22 10.5l-6-3.5-6 3.5v7l6 3.5 6-3.5z'/%3E%3Cline x1='16' y1='7' x2='16' y2='21'/%3E%3Cline x1='10' y1='10.5' x2='22' y2='10.5'/%3E%3C/g%3E%3C/svg%3E"/>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -61,6 +65,102 @@ html,[data-theme="dark"]{
 /* Smooth transitions */
 *{transition:background-color .18s ease,border-color .18s ease,color .05s ease}
 button,input,select{transition:none!important}
+
+/* ── iOS / Mobile ── */
+@media (max-width: 768px) {
+  body { overflow: hidden; }
+  /* Safe area helpers */
+  .safe-top    { padding-top:    env(safe-area-inset-top, 0px);    }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+  /* Hide desktop sidebar on mobile */
+  .desktop-sidebar { display: none !important; }
+
+  /* Mobile header */
+  .mobile-header {
+    display: flex !important;
+    position: sticky; top: 0; z-index: 100;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .desktop-header { display: none !important; }
+
+  /* Main content gets bottom padding for nav bar */
+  .main-scroll {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Bottom nav bar */
+  .bottom-nav {
+    display: flex !important;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Stat grids: 2 cols on mobile */
+  .stat-grid-4 { grid-template-columns: repeat(2,1fr) !important; }
+  .stat-grid-3 { grid-template-columns: repeat(2,1fr) !important; }
+
+  /* Charts: single col */
+  .chart-row   { grid-template-columns: 1fr !important; }
+
+  /* Project cards: single col */
+  .proj-grid   { grid-template-columns: 1fr !important; }
+
+  /* Kanban: horizontal snap scroll */
+  .kanban-board {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch !important;
+    gap: 12px !important;
+    padding-bottom: 8px !important;
+  }
+  .kanban-col {
+    min-width: 82vw !important;
+    max-width: 82vw !important;
+    scroll-snap-align: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Modals: full-screen slide-up */
+  .modal-overlay {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+  .modal-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 92vh !important;
+    border-radius: 18px 18px 0 0 !important;
+    border-bottom: none !important;
+    margin-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  /* Form grids: single col */
+  .form-grid-2 { grid-template-columns: 1fr !important; }
+  .form-grid-2 > * { grid-column: 1 !important; }
+
+  /* Larger touch targets */
+  button { min-height: 36px; }
+  .nav-btn { min-height: 44px !important; }
+
+  /* Page padding */
+  .page-pad { padding: 14px 16px !important; }
+
+  /* Settings table: hide rate col */
+  .cur-rate-col { display: none !important; }
+
+  /* Demo banner: shorter */
+  .demo-banner span { font-size: 11px !important; }
+  .demo-banner code { display: none !important; }
+}
+
+/* Desktop: hide mobile-only elements */
+@media (min-width: 769px) {
+  .mobile-header { display: none !important; }
+  .bottom-nav    { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -358,7 +458,7 @@ function LoginPage(props) {
   }
 
   return (
-    <div style={{height:'100vh',background:'var(--c-bg)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+    <div style={{height:'100vh',minHeight:'100dvh',background:'var(--c-bg)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,paddingTop:'max(20px, calc(20px + env(safe-area-inset-top, 0px)))'}}>
       {/* Theme toggle — top right */}
       <button onClick={onToggleTheme} title="Toggle theme"
         style={{position:'absolute',top:16,right:16,background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 11px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:6,fontSize:12,zIndex:10}}>
@@ -456,7 +556,7 @@ function EditProfileModal(props) {
         </div>
         <div><div style={{fontSize:13.5,fontWeight:600,color:'var(--c-text1)'}}>{u.email}</div><div style={{fontSize:11.5,color:'var(--c-text5)',marginTop:2}}>ID: {String(u.id).slice(0,18)}…</div></div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+      <div className='form-grid-2' style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
         <div style={{gridColumn:'1/-1'}}><label style={LBL}>Full Name</label><input style={INP} value={form.full_name} onChange={function(e){set('full_name',e.target.value);}} placeholder="e.g. Jane Smith"/></div>
         <div>
           <label style={LBL}>Role</label>
@@ -1136,7 +1236,7 @@ function Dashboard(props) {
   ];
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
         {cards.map(function(c){return(
           <div key={c.label} style={{background:'var(--c-surface)',borderRadius:12,border:'1px solid var(--c-border)',padding:'18px 20px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
@@ -1160,7 +1260,7 @@ function Dashboard(props) {
           <div style={{height:'100%',borderRadius:999,width:pct+'%',background:'linear-gradient(90deg,'+barCol+'cc,'+barCol+')',transition:'width .5s'}}/>
         </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:14}}>
+      <div className='chart-row' style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:14}}>
         <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
           <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Spend by Project</div>
           <BarChart data={chartData} height={200} currency={currency}/>
@@ -1223,7 +1323,7 @@ function ProjectsList(props) {
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
       <div style={{fontSize:12,color:'var(--c-text5)'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
       {!projects.length&&<div style={{background:'var(--c-surface)',border:'1px dashed #334155',borderRadius:14,padding:'50px 20px',textAlign:'center',color:'var(--c-text5)',fontSize:13}}>No projects yet. Click <strong style={{color:'#F59E0B'}}>New Project</strong> to get started.</div>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}}>
+      <div className='proj-grid' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(290px,1fr))',gap:14}}>
         {stats.map(function(p){return(
           <div key={p.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:14,overflow:'hidden',transition:'border-color .15s'}}
             onMouseEnter={function(e){e.currentTarget.style.borderColor=p.color+'55';}}
@@ -1286,17 +1386,17 @@ function Kanban(props) {
           </div>
         </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+      <div className='kanban-board' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(spend,currency),pct+'% used'],['Items',allPi.length,'Total'],['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length]].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
       </div>
       <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'11px 16px'}}>
         <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span><span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span></div>
         <div style={{height:6,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/></div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {STAGES.map(function(stage,si){
           var col=pi.filter(function(i){return i.status===stage;}),cfg=SC[stage];
-          return(<div key={stage} style={{background:'var(--c-kanban)',border:'1px solid var(--c-border)',borderRadius:12,display:'flex',flexDirection:'column',minHeight:280}}>
+          return(<div key={stage} className='kanban-col' style={{background:'var(--c-kanban)',border:'1px solid var(--c-border)',borderRadius:12,display:'flex',flexDirection:'column',minHeight:280}}>
             <div style={{padding:'11px 12px 9px',borderBottom:'2px solid '+cfg.color+'35',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
               <div style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:7,height:7,borderRadius:'50%',background:cfg.color}}/><span style={{fontSize:11,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.6px'}}>{stage}</span></div>
               <span style={{fontSize:11,fontWeight:700,color:cfg.color,background:cfg.bg,padding:'1px 7px',borderRadius:999}}>{col.length}</span>
@@ -1461,7 +1561,7 @@ function SettingsView(props) {
             <thead>
               <tr>
                 {['Code','Name','Symbol','Rate (USD)','Active','Actions'].map(function(h){
-                  return <th key={h} style={TH}>{h}</th>;
+                  return <th key={h} className={h==='Rate (USD)'?'cur-rate-col':''} style={TH}>{h}</th>;
                 })}
               </tr>
             </thead>
@@ -1595,6 +1695,14 @@ function App() {
   var _ds=useState('Creation'),defStage=_ds[0],setDefStage=_ds[1];
   var _cu=useState('USD'),currency=_cu[0],setCurrency=_cu[1];
   var _ts=useState([]),toasts=_ts[0],setToasts=_ts[1];
+  /* ── Mobile detection ─────────────────────────────────────── */
+  var _mob=useState(function(){return window.innerWidth<=768;}),isMobile=_mob[0],setIsMobile=_mob[1];
+  useEffect(function(){
+    function onResize(){setIsMobile(window.innerWidth<=768);}
+    window.addEventListener('resize',onResize);
+    return function(){window.removeEventListener('resize',onResize);};
+  },[]);
+
   /* ── Theme ─────────────────────────────────────────────────── */
   var _th=useState(function(){try{return localStorage.getItem('pf-theme')||'dark';}catch(e){return'dark';}}),
       theme=_th[0],setTheme=_th[1];
@@ -1832,8 +1940,8 @@ function App() {
   return (
     <div style={{display:'flex',height:'100vh',background:'var(--c-bg)',overflow:'hidden'}}>
 
-      {/* Sidebar */}
-      <aside style={{width:212,minWidth:212,background:'var(--c-sidebar)',borderRight:'1px solid var(--c-border)',display:'flex',flexDirection:'column'}}>
+      {/* ── Desktop Sidebar ────────────────────────────────────── */}
+      <aside className="desktop-sidebar" style={{width:212,minWidth:212,background:'var(--c-sidebar)',borderRight:'1px solid var(--c-border)',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'18px 14px',borderBottom:'1px solid var(--c-border)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:34,height:34,borderRadius:9,background:'#F59E0B',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Ico n="package" size={16} color="#000"/></div>
@@ -1861,7 +1969,6 @@ function App() {
             </div>
           )}
         </nav>
-        {/* User footer */}
         <div style={{padding:'12px',borderTop:'1px solid var(--c-border)'}}>
           <div style={{display:'flex',alignItems:'center',gap:9}}>
             <div style={{width:30,height:30,borderRadius:'50%',background:'rgba(245,158,11,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:'#F59E0B',flexShrink:0}}>
@@ -1876,52 +1983,84 @@ function App() {
         </div>
       </aside>
 
-      {/* Main */}
+      {/* ── Main column ─────────────────────────────────────────── */}
       <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
-        {DEMO&&(
-          <div style={{background:'rgba(245,158,11,.08)',borderBottom:'1px solid rgba(245,158,11,.2)',padding:'7px 24px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#F59E0B',flexShrink:0}}>
-            <Ico n="alert" size={13}/>
-            <span><strong>Demo Mode</strong> — data is not saved. Replace <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_URL</code> and <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_ANON_KEY</code> in index.html to enable persistence.</span>
+
+        {/* Mobile header */}
+        <header className="mobile-header safe-top" style={{padding:'10px 16px 10px',borderBottom:'1px solid var(--c-border)',display:'none',alignItems:'center',justifyContent:'space-between',background:'var(--c-header)',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:9}}>
+            <div style={{width:30,height:30,borderRadius:8,background:'#F59E0B',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Ico n="package" size={14} color="#000"/></div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{pid&&selProj?selProj.name:NAV.find(function(n){return n.id===tab;})?NAV.find(function(n){return n.id===tab;}).label:'ProcureFlow'}</div>
+              {pid&&selProj&&<div style={{fontSize:10.5,color:'var(--c-text5)',marginTop:1}}>{selProj.description||'Project'}</div>}
+            </div>
           </div>
-        )}
-        <header style={{padding:'13px 24px',borderBottom:'1px solid var(--c-border)',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--c-header)',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:7}}>
+            <button onClick={toggleTheme} style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 8px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:5}}>
+              <Ico n={theme==='dark'?'sun':'moon'} size={14}/>
+            </button>
+            {tab==='projects'&&!pid&&<button onClick={function(){setEditProj(null);setShowProj(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'7px 11px',color:'#000',fontWeight:700,fontSize:12,display:'flex',alignItems:'center',gap:4}}><Ico n="plus" size={13}/> New</button>}
+            {tab==='projects'&&pid&&<button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'7px 11px',color:'#000',fontWeight:700,fontSize:12,display:'flex',alignItems:'center',gap:4}}><Ico n="plus" size={13}/> Add</button>}
+          </div>
+        </header>
+
+        {/* Desktop header */}
+        <header className="desktop-header" style={{padding:'13px 24px',borderBottom:'1px solid var(--c-border)',display:'flex',alignItems:'center',justifyContent:'space-between',background:'var(--c-header)',flexShrink:0}}>
           <div>
-            <h1 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--c-text1)'}}>{pageTitles[tab]||pageTitle}</h1>
+            <h1 style={{margin:0,fontSize:16,fontWeight:700,color:'var(--c-text1)'}}>{pageTitles[tab]||'ProcureFlow'}</h1>
             <p style={{margin:0,marginTop:2,fontSize:11.5,color:'var(--c-text5)'}}>{pageSubs[tab]||''}</p>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:9}}>
-            <button onClick={toggleTheme} title={theme==='dark'?'Switch to light mode':'Switch to dark mode'}
-              style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 9px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:6,fontSize:12.5}}>
-              <Ico n={theme==='dark'?'sun':'moon'} size={15}/>
-              <span style={{fontSize:12,fontWeight:500}}>{theme==='dark'?'Light':'Dark'}</span>
+            <button onClick={toggleTheme} style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 9px',color:'var(--c-text4)',display:'flex',alignItems:'center',gap:6,fontSize:12.5}}>
+              <Ico n={theme==='dark'?'sun':'moon'} size={15}/><span style={{fontSize:12,fontWeight:500}}>{theme==='dark'?'Light':'Dark'}</span>
             </button>
             <button style={{background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:8,padding:'7px 9px',color:'var(--c-text5)',display:'flex'}}><Ico n="bell" size={15}/></button>
             {tab==='projects'&&!pid&&<button onClick={function(){setEditProj(null);setShowProj(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> New Project</button>}
-            {tab==='projects'&&pid&&<button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> Add Equipment</button>}          </div>
+            {tab==='projects'&&pid&&<button onClick={function(){setDefStage('Creation');setEditItem(null);setShowItem(true);}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 16px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:6}}><Ico n="plus" size={13}/> Add Equipment</button>}
+          </div>
         </header>
-        <main style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
-          {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid #1E293B',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading data…</div>}
+
+        {/* Demo banner */}
+        {DEMO&&(
+          <div className="demo-banner" style={{background:'rgba(245,158,11,.08)',borderBottom:'1px solid rgba(245,158,11,.2)',padding:'7px 16px',display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#F59E0B',flexShrink:0}}>
+            <Ico n="alert" size={13}/>
+            <span><strong>Demo Mode</strong> — Replace <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_URL</code> and <code style={{background:'rgba(245,158,11,.12)',padding:'1px 5px',borderRadius:4}}>YOUR_SUPABASE_ANON_KEY</code> to enable persistence.</span>
+          </div>
+        )}
+
+        {/* Page body */}
+        <main className="main-scroll page-pad" style={{flex:1,overflowY:'auto',padding:'20px 24px',WebkitOverflowScrolling:'touch'}}>
+          {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid var(--c-border)',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading…</div>}
           {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
           {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
           {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
-          {tab==='team'&&<TeamView users={users} currentUser={user}
-            onAdd={function(){setShowAddUser(true);}}
-            onUpdate={updateUser} onDelete={deleteUser}
-            onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
-          {tab==='settings'&&<SettingsView
-            currency={currency} setCurrency={setCurrency}
-            currencies={currencies}
-            onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency}
-            categories={categories} onAddCat={addCat} onRemoveCat={removeCat}
-            rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates}
-            onToast={toast}/>}
+          {tab==='team'&&<TeamView users={users} currentUser={user} onAdd={function(){setShowAddUser(true);}} onUpdate={updateUser} onDelete={deleteUser} onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
+          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} onToast={toast}/>}
         </main>
       </div>
 
+      {/* ── Mobile bottom nav ───────────────────────────────────── */}
+      <nav className="bottom-nav" style={{display:'none',background:'var(--c-sidebar)',borderTop:'1px solid var(--c-border)',padding:'4px 0'}}>
+        {NAV.map(function(n){
+          var act=tab===n.id;
+          return(
+            <button key={n.id} className="nav-btn" onClick={function(){setTab(n.id);if(n.id!=='projects')setPid(null);}}
+              style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,padding:'6px 4px',background:'none',border:'none',color:act?'#F59E0B':'var(--c-text5)',minHeight:48}}>
+              <Ico n={n.icon} size={22} style={{color:act?'#F59E0B':'var(--c-text5)'}}/>
+              <span style={{fontSize:10,fontWeight:act?700:400,letterSpacing:'.2px'}}>{n.label}</span>
+              {act&&<div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:28,height:2.5,background:'#F59E0B',borderRadius:'0 0 2px 2px'}}/>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ── Modals ─────────────────────────────────────────────── */}
       {showProj&&<ProjectModal project={editProj} currencies={currencies} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
       {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currencies={currencies} currency={selProj?selProj.currency||currency:currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
       {showAddUser&&<AddUserModal onSave={async function(form){await addUser(form);setShowAddUser(false);}} onClose={function(){setShowAddUser(false);}}/>}
-      <div style={{position:'fixed',bottom:20,right:20,display:'flex',flexDirection:'column',gap:8,zIndex:2000}}>
+
+      {/* ── Toasts ─────────────────────────────────────────────── */}
+      <div style={{position:'fixed',bottom:isMobile?'calc(72px + env(safe-area-inset-bottom, 0px))':'20px',right:isMobile?'12px':'20px',left:isMobile?'12px':'auto',display:'flex',flexDirection:'column',gap:8,zIndex:2000}}>
         {toasts.map(function(t){return <Toast key={t.id} message={t.message} type={t.type} onClose={function(){setToasts(function(p){return p.filter(function(x){return x.id!==t.id;});});}}/>;} )}
       </div>
     </div>
