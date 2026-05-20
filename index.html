@@ -26,6 +26,10 @@ input,select,button,textarea{font-family:inherit;outline:none}
 input:focus,select:focus{border-color:#F59E0B!important;box-shadow:0 0 0 3px rgba(245,158,11,.15)!important}
 option{background:var(--c-surface);color:var(--c-text2)}
 button{cursor:pointer}
+/* Prevent iOS from cancelling text selection in inputs/textareas */
+input,textarea{-webkit-user-select:text;user-select:text;}
+/* Prevent tap highlight flash on buttons */
+button,a{-webkit-tap-highlight-color:transparent;}
 /* ── Dark theme (default) ── */
 html,[data-theme="dark"]{
   --c-bg:         #0F172A;
@@ -395,14 +399,38 @@ function Toast(props) {
 
 /* ── Modal ──────────────────────────────────────────────────── */
 function Modal(props) {
+  var _md = React.useRef(false);
+  /* Only mark a close-intent if mousedown began ON the overlay itself */
+  function onOverlayMouseDown(e) {
+    _md.current = (e.target === e.currentTarget);
+  }
+  /* Only close if mousedown AND mouseup both hit the overlay */
+  function onOverlayMouseUp(e) {
+    if (_md.current && e.target === e.currentTarget) {
+      /* no-op — intentionally do NOT close on backdrop click */
+    }
+    _md.current = false;
+  }
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-      <div style={{background:'var(--c-surface)',borderRadius:14,border:'1px solid var(--c-border2)',width:props.w||500,maxWidth:'100%',maxHeight:'90vh',display:'flex',flexDirection:'column'}}>
+    <div
+      className="modal-overlay"
+      onMouseDown={onOverlayMouseDown}
+      onMouseUp={onOverlayMouseUp}
+      style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}
+    >
+      <div
+        className="modal-sheet"
+        onMouseDown={function(e){e.stopPropagation();}}
+        onMouseUp={function(e){e.stopPropagation();}}
+        onTouchStart={function(e){e.stopPropagation();}}
+        onTouchEnd={function(e){e.stopPropagation();}}
+        style={{background:'var(--c-surface)',borderRadius:14,border:'1px solid var(--c-border2)',width:props.w||500,maxWidth:'100%',maxHeight:'90vh',display:'flex',flexDirection:'column'}}
+      >
         <div style={{padding:'16px 20px',borderBottom:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <h3 style={{margin:0,fontSize:14.5,fontWeight:700,color:'var(--c-text1)'}}>{props.title}</h3>
           <button onClick={props.onClose} style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:4}}><Ico n="x" size={16}/></button>
         </div>
-        <div style={{padding:'18px 20px',overflowY:'auto',flex:1}}>{props.children}</div>
+        <div style={{padding:'18px 20px',overflowY:'auto',flex:1,WebkitOverflowScrolling:'touch'}}>{props.children}</div>
         {props.footer&&<div style={{padding:'13px 20px',borderTop:'1px solid var(--c-border2)',display:'flex',justifyContent:'flex-end',gap:9,flexShrink:0}}>{props.footer}</div>}
       </div>
     </div>
