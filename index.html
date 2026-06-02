@@ -1334,18 +1334,24 @@ function ManpowerTab(props) {
   async function commitNew(){
     if(!pendingNew||!pendingNew.description.trim()){setPendingNew(null);return;}
     var c=calc(pendingNew); setSaving(true);
-    await onSave({description:pendingNew.description.trim(),manpower_type:pendingNew.manpower_type,qty:c.qty,
-      start_date:pendingNew.start_date||null,end_date:pendingNew.end_date||null,
-      fte:parseFloat(pendingNew.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:project.id});
-    setSaving(false); setPendingNew(null);
+    try {
+      await onSave({description:pendingNew.description.trim(),manpower_type:pendingNew.manpower_type,qty:c.qty,
+        start_date:pendingNew.start_date||null,end_date:pendingNew.end_date||null,
+        fte:parseFloat(pendingNew.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:project.id});
+      setPendingNew(null);
+    } catch(e){ /* toast shown by saveManpower */ }
+    setSaving(false);
   }
   async function commitEdit(){
     if(!editingRow)return;
     var c=calc(editingRow.form); setSaving(true);
-    await onSave({id:editingRow.id,description:editingRow.form.description.trim(),manpower_type:editingRow.form.manpower_type,
-      qty:c.qty,start_date:editingRow.form.start_date||null,end_date:editingRow.form.end_date||null,
-      fte:parseFloat(editingRow.form.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:editingRow.projectId});
-    setSaving(false); setEditingRow(null);
+    try {
+      await onSave({id:editingRow.id,description:editingRow.form.description.trim(),manpower_type:editingRow.form.manpower_type,
+        qty:c.qty,start_date:editingRow.form.start_date||null,end_date:editingRow.form.end_date||null,
+        fte:parseFloat(editingRow.form.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:editingRow.projectId});
+      setEditingRow(null);
+    } catch(e){ /* toast shown by saveManpower */ }
+    setSaving(false);
   }
 
   function exportExcel(){
@@ -2591,32 +2597,43 @@ function App() {
 
   /* Manpower CRUD */
   async function saveManpower(data) {
+    var payload = {
+      description:   data.description,
+      manpower_type: data.manpower_type,
+      qty:           data.qty,
+      start_date:    data.start_date || null,
+      end_date:      data.end_date   || null,
+      fte:           data.fte,
+      est_hours:     data.est_hours,
+      act_hours:     data.act_hours,
+    };
     if(DEMO||!db){
       if(data.id){
-        setManpower(function(p){return p.map(function(m){return m.id===data.id?Object.assign({},m,data):m;});});
+        setManpower(function(p){return p.map(function(m){return m.id===data.id?Object.assign({},m,payload,{id:data.id,projectId:data.projectId}):m;});});
         toast('Manpower entry updated');
       } else {
-        setManpower(function(p){return p.concat([Object.assign({},data,{id:uid()})]);});
+        setManpower(function(p){return p.concat([Object.assign({},payload,{id:uid(),projectId:data.projectId})]);});
         toast('Manpower entry added');
       }
       return;
     }
-    var row=toDBM(data);
     if(data.id){
-      var r=await db.from('manpower_entries').update(row).eq('id',data.id).select().single();
-      if(r.error) throw new Error(r.error.message);
+      var r=await db.from('manpower_entries').update(payload).eq('id',data.id).select().single();
+      if(r.error){toast('Save failed: '+r.error.message,'error');throw new Error(r.error.message);}
       setManpower(function(p){return p.map(function(m){return m.id===data.id?toAppM(r.data):m;});});
       toast('Manpower entry updated');
     } else {
-      var d2=Object.assign({},row); delete d2.id;
-      var r2=await db.from('manpower_entries').insert(d2).select().single();
-      if(r2.error) throw new Error(r2.error.message);
+      var r2=await db.from('manpower_entries').insert(Object.assign({},payload,{project_id:data.projectId})).select().single();
+      if(r2.error){toast('Save failed: '+r2.error.message,'error');throw new Error(r2.error.message);}
       setManpower(function(p){return p.concat([toAppM(r2.data)]);});
       toast('Manpower entry added');
     }
   }
   async function deleteManpower(id){
-    if(!DEMO&&db)await db.from('manpower_entries').delete().eq('id',id);
+    if(!DEMO&&db){
+      var r=await db.from('manpower_entries').delete().eq('id',id);
+      if(r.error){toast('Delete failed: '+r.error.message,'error');return;}
+    }
     setManpower(function(p){return p.filter(function(m){return m.id!==id;});});
     toast('Manpower entry removed','info');
   }
