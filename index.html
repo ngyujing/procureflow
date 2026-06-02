@@ -1329,6 +1329,7 @@ function ManpowerTab(props) {
     var estH=parseFloat(form.est_hours)||0;
     var actH=parseFloat(form.act_hours)||0;
     var days=calcDays(form.start_date,form.end_date);
+    var fte=parseFloat(form.fte)||1;
     return{rate:rate,qty:qty,estH:estH,actH:actH,days:days,fte:fte,estC:estH*qty*fte*rate,actC:actH*qty*fte*rate};
   }
 
