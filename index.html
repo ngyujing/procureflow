@@ -1302,6 +1302,247 @@ function ItemModal(props) {
 }
 
 
+/* ── Manpower Tab (inline line-item editor) ─────────────────── */
+function ManpowerTab(props) {
+  var project=props.project, manpower=props.manpower||[];
+  var onSave=props.onSave, onDelete=props.onDelete;
+
+  var _pn=useState(null),pendingNew=_pn[0],setPendingNew=_pn[1];
+  var _er=useState(null),editingRow=_er[0],setEditingRow=_er[1];
+  var _sav=useState(false),saving=_sav[0],setSaving=_sav[1];
+
+  var pm=manpower.filter(function(m){return m.projectId===project.id;});
+
+  var grandEstH=0,grandEstC=0,grandActH=0,grandActC=0;
+  pm.forEach(function(m){
+    var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1;
+    grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
+    grandEstC+=(m.est_hours||0)*qty*rate; grandActC+=(m.act_hours||0)*qty*rate;
+  });
+
+  function blankForm(){return{description:'',manpower_type:MANPOWER_TYPES[0],qty:'1',start_date:'',end_date:'',fte:'1',est_hours:'',act_hours:'0'};}
+  function upd(form,k,v){return Object.assign({},form,{[k]:v});}
+  function calc(form){
+    var rate=MANPOWER_RATES[form.manpower_type]||0;
+    var qty=Math.max(1,parseInt(form.qty)||1);
+    var estH=parseFloat(form.est_hours)||0;
+    var actH=parseFloat(form.act_hours)||0;
+    var days=calcDays(form.start_date,form.end_date);
+    return{rate:rate,qty:qty,estH:estH,actH:actH,days:days,estC:estH*qty*rate,actC:actH*qty*rate};
+  }
+
+  async function commitNew(){
+    if(!pendingNew||!pendingNew.description.trim()){setPendingNew(null);return;}
+    var c=calc(pendingNew); setSaving(true);
+    await onSave({description:pendingNew.description.trim(),manpower_type:pendingNew.manpower_type,qty:c.qty,
+      start_date:pendingNew.start_date||null,end_date:pendingNew.end_date||null,
+      fte:parseFloat(pendingNew.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:project.id});
+    setSaving(false); setPendingNew(null);
+  }
+  async function commitEdit(){
+    if(!editingRow)return;
+    var c=calc(editingRow.form); setSaving(true);
+    await onSave({id:editingRow.id,description:editingRow.form.description.trim(),manpower_type:editingRow.form.manpower_type,
+      qty:c.qty,start_date:editingRow.form.start_date||null,end_date:editingRow.form.end_date||null,
+      fte:parseFloat(editingRow.form.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:editingRow.projectId});
+    setSaving(false); setEditingRow(null);
+  }
+
+  function exportExcel(){
+    if(!window.XLSX){alert('Excel library not loaded.');return;}
+    var XLSX=window.XLSX;
+    var cols=['Description of Work','Manpower Type','Rate/hr (USD)','Qty','Start Date','End Date','Days','FTE',
+              'Est. Hours (Total)','Est. Cost (USD)','Act. Hours (Total)','Act. Cost (USD)'];
+    var rows=[cols];
+    pm.forEach(function(m){
+      var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,days=calcDays(m.start_date,m.end_date);
+      rows.push([m.description||'',m.manpower_type,rate,qty,m.start_date||'',m.end_date||'',days,m.fte||1,
+                 (m.est_hours||0)*qty,(m.est_hours||0)*qty*rate,(m.act_hours||0)*qty,(m.act_hours||0)*qty*rate]);
+    });
+    rows.push([]);
+    rows.push(['GRAND TOTAL','','','','','','','',grandEstH,grandEstC,grandActH,grandActC]);
+    if(project.manpower_budget>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','','',project.manpower_budget,'','']);
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:34},{wch:20},{wch:13},{wch:6},{wch:12},{wch:12},{wch:6},{wch:6},{wch:16},{wch:16},{wch:16},{wch:16}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Manpower Plan');
+    XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
+  }
+
+  var ISM={background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'5px 7px',color:'var(--c-text2)',fontSize:12,width:'100%',minWidth:0};
+  var TH={padding:'8px 10px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
+  var THR=Object.assign({},TH,{textAlign:'right'});
+  var TD={padding:'9px 10px',fontSize:12.5,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
+  var TDR=Object.assign({},TD,{textAlign:'right'});
+  var TDE=Object.assign({},TD,{padding:'6px 8px'});
+
+  function EditRow(rowProps){
+    var form=rowProps.form,setForm=rowProps.setForm,onCommit=rowProps.onCommit,onCancel=rowProps.onCancel,isNew=rowProps.isNew;
+    var c=calc(form);
+    return (
+      <tr style={{background:'rgba(245,158,11,.05)'}}>
+        <td style={TDE}>
+          <input autoFocus={isNew} value={form.description} onChange={function(e){setForm(upd(form,'description',e.target.value));}}
+            placeholder="Description of work…" style={Object.assign({},ISM,{minWidth:160})}/>
+        </td>
+        <td style={TDE}>
+          <select value={form.manpower_type} onChange={function(e){setForm(upd(form,'manpower_type',e.target.value));}} style={Object.assign({},ISM,{minWidth:150})}>
+            {MANPOWER_TYPES.map(function(t){return <option key={t} value={t}>{t}</option>;})}
+          </select>
+        </td>
+        <td style={Object.assign({},TDE,{textAlign:'right',color:MP_COLOR,fontWeight:700,whiteSpace:'nowrap'})}>
+          ${c.rate.toLocaleString()}/hr
+        </td>
+        <td style={TDE}><input type="number" min="1" step="1" value={form.qty} onChange={function(e){setForm(upd(form,'qty',e.target.value));}} style={Object.assign({},ISM,{width:50})}/></td>
+        <td style={TDE}><input type="date" value={form.start_date} onChange={function(e){setForm(upd(form,'start_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
+        <td style={TDE}><input type="date" value={form.end_date} onChange={function(e){setForm(upd(form,'end_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
+        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:600,color:c.days>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap'})}>{c.days>0?c.days+'d':'—'}</td>
+        <td style={TDE}><input type="number" min="0" max="2" step="0.1" value={form.fte} onChange={function(e){setForm(upd(form,'fte',e.target.value));}} style={Object.assign({},ISM,{width:50})}/></td>
+        <td style={TDE}><input type="number" min="0" step="0.5" value={form.est_hours} onChange={function(e){setForm(upd(form,'est_hours',e.target.value));}} placeholder="0" style={Object.assign({},ISM,{width:70})}/></td>
+        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'var(--c-text2)',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+        <td style={TDE}><input type="number" min="0" step="0.5" value={form.act_hours} onChange={function(e){setForm(upd(form,'act_hours',e.target.value));}} placeholder="0" style={Object.assign({},ISM,{width:70})}/></td>
+        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'var(--c-text2)',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+        <td style={Object.assign({},TDE,{whiteSpace:'nowrap'})}>
+          <div style={{display:'flex',gap:5}}>
+            <button onClick={onCommit} disabled={saving}
+              style={{background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.3)',borderRadius:6,padding:'4px 10px',color:'#34D399',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>
+              <Ico n="save" size={11}/>{saving?'…':'Save'}
+            </button>
+            <button onClick={onCancel}
+              style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 8px',color:'var(--c-text5)',fontSize:12}}>
+              <Ico n="x" size={11}/>
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+
+      {/* Header */}
+      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--c-border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:28,height:28,borderRadius:7,background:'rgba(167,139,250,.12)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <Ico n="people" size={13} color={MP_COLOR}/>
+          </div>
+          <div>
+            <span style={{fontSize:13,fontWeight:700,color:'var(--c-text1)'}}>Manpower Plan</span>
+            <span style={{fontSize:11,color:'var(--c-text5)',marginLeft:10}}>
+              {pm.length} line{pm.length!==1?'s':''}
+              {project.manpower_budget>0&&<span> · Budget <strong style={{color:MP_COLOR}}>${project.manpower_budget.toLocaleString('en-US',{maximumFractionDigits:0})}</strong></span>}
+              &nbsp;· Est <strong style={{color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
+              &nbsp;· Act <strong style={{color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
+            </span>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:7}}>
+          <button onClick={exportExcel}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'rgba(52,211,153,.1)',border:'1px solid rgba(52,211,153,.25)',borderRadius:7,color:'#34D399',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            <Ico n="download" size={12}/> Export Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',minWidth:1060}}>
+          <thead>
+            <tr>
+              <th style={Object.assign({},TH,{minWidth:180})}>Description of Work</th>
+              <th style={Object.assign({},TH,{minWidth:150})}>Type</th>
+              <th style={THR}>Rate/hr</th>
+              <th style={THR}>Qty</th>
+              <th style={TH}>Start Date</th>
+              <th style={TH}>End Date</th>
+              <th style={THR}>Days</th>
+              <th style={THR}>FTE</th>
+              <th style={THR}>Est. Hrs</th>
+              <th style={THR}>Est. Cost</th>
+              <th style={THR}>Act. Hrs</th>
+              <th style={THR}>Act. Cost</th>
+              <th style={TH}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pm.map(function(m){
+              if(editingRow&&editingRow.id===m.id){
+                return <EditRow key={m.id} form={editingRow.form} setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}} onCommit={commitEdit} onCancel={function(){setEditingRow(null);}} isNew={false}/>;
+              }
+              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1;
+              var days=calcDays(m.start_date,m.end_date);
+              var estC=(m.est_hours||0)*qty*rate, actC=(m.act_hours||0)*qty*rate;
+              return (
+                <tr key={m.id}
+                  onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
+                  onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                  <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
+                  <td style={TD}>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 9px',borderRadius:999,fontSize:11,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
+                      {m.manpower_type}
+                    </span>
+                  </td>
+                  <td style={Object.assign({},TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/hr</td>
+                  <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
+                  <td style={TD}>{m.start_date||'—'}</td>
+                  <td style={TD}>{m.end_date||'—'}</td>
+                  <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days||'—'}</td>
+                  <td style={TDR}>{(m.fte||1).toFixed(1)}</td>
+                  <td style={Object.assign({},TDR,{color:'#60A5FA'})}>{((m.est_hours||0)*qty).toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'var(--c-text2)'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TDR,{color:'#34D399'})}>{((m.act_hours||0)*qty).toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'var(--c-text2)'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
+                    <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+                      <button onClick={function(){setEditingRow({id:m.id,projectId:m.projectId,form:{description:m.description||'',manpower_type:m.manpower_type,qty:String(m.qty||1),start_date:m.start_date||'',end_date:m.end_date||'',fte:String(m.fte||1),est_hours:String(m.est_hours||''),act_hours:String(m.act_hours||0)}});}}
+                        style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'4px 7px',color:'#60A5FA',display:'flex',cursor:'pointer'}}>
+                        <Ico n="edit" size={11}/>
+                      </button>
+                      <button onClick={function(){onDelete(m.id);}}
+                        style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer'}}>
+                        <Ico n="trash" size={11}/>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* New pending row */}
+            {pendingNew&&<EditRow form={pendingNew} setForm={setPendingNew} onCommit={commitNew} onCancel={function(){setPendingNew(null);}} isNew={true}/>}
+          </tbody>
+
+          {/* Grand total footer */}
+          {pm.length>0&&(
+            <tfoot>
+              <tr style={{background:'rgba(245,158,11,.05)'}}>
+                <td colSpan={8} style={{padding:'9px 10px',fontSize:12,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.4px',borderTop:'2px solid rgba(245,158,11,.25)'}}>
+                  Grand Total
+                </td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>{grandEstH.toLocaleString()}</td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>{grandActH.toLocaleString()}</td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                <td style={{borderTop:'2px solid rgba(245,158,11,.25)'}}/>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {/* Add Line button */}
+      <div style={{padding:'10px 14px',borderTop:'1px solid var(--c-border)'}}>
+        <button onClick={function(){if(!pendingNew){setPendingNew(blankForm());}}}
+          disabled={!!pendingNew}
+          style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:pendingNew?'var(--c-bg)':'rgba(245,158,11,.1)',border:'1px dashed '+(pendingNew?'var(--c-border2)':'rgba(245,158,11,.4)'),borderRadius:8,color:pendingNew?'var(--c-ghost)':'#F59E0B',fontSize:12.5,fontWeight:600,cursor:pendingNew?'not-allowed':'pointer',transition:'all .15s'}}>
+          <Ico n="plus" size={13}/> Add Line
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Manpower Modal ─────────────────────────────────────────── */
 function ManpowerModal(props) {
   var entry=props.entry, projectId=props.projectId, onSave=props.onSave, onClose=props.onClose;
@@ -1800,10 +2041,9 @@ function ProjectsList(props) {
 function Kanban(props) {
   var project=props.project,items=props.items,categories=props.categories,currency=props.currency,rates=props.rates;
   var onBack=props.onBack,onAdd=props.onAdd,onEdit=props.onEdit,onDelete=props.onDelete,onMove=props.onMove;
-  var manpower=props.manpower||[],onAddManpower=props.onAddManpower,onEditManpower=props.onEditManpower,onDeleteManpower=props.onDeleteManpower;
+  var manpower=props.manpower||[],onAddManpower=props.onAddManpower,onDeleteManpower=props.onDeleteManpower;
   var _s=useState(''),search=_s[0],setSearch=_s[1];
-  var _sm=useState(false),showMP=_sm[0],setShowMP=_sm[1];
-  var _em=useState(null),editMP=_em[0],setEditMP=_em[1];
+  var _vt=useState('equipment'),viewTab=_vt[0],setViewTab=_vt[1];
   var pi=useMemo(function(){var q=search.toLowerCase();return items.filter(function(i){return i.projectId===project.id&&(!q||i.name.toLowerCase().includes(q)||i.vendor.toLowerCase().includes(q));});},[items,project.id,search]);
   var allPi=items.filter(function(i){return i.projectId===project.id;});
   var spend=allPi.reduce(function(s,i){return s+i.cost;},0);
@@ -1827,11 +2067,11 @@ function Kanban(props) {
             <div><h2 style={{margin:0,fontSize:17,fontWeight:700,color:'var(--c-text1)'}}>{project.name}</h2><div style={{fontSize:12,color:'var(--c-text5)'}}>{project.description}</div></div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{position:'relative'}}>
+            {viewTab==='equipment'&&<div style={{position:'relative'}}>
               <div style={{position:'absolute',left:9,top:'50%',transform:'translateY(-50%)',pointerEvents:'none',display:'flex'}}><Ico n="search" size={13} color="#475569"/></div>
               <input value={search} onChange={function(e){setSearch(e.target.value);}} placeholder="Search equipment…" style={{paddingLeft:28,paddingRight:10,paddingTop:7,paddingBottom:7,background:'var(--c-surface)',border:'1px solid var(--c-border2)',borderRadius:7,color:'var(--c-text2)',fontSize:12.5,width:180}}/>
-            </div>
-            <button onClick={function(){onAdd('Creation');}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 14px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:5}}><Ico n="plus" size={13}/> Add Equipment</button>
+            </div>}
+            {viewTab==='equipment'&&<button onClick={function(){onAdd('Creation');}} style={{background:'#F59E0B',border:'none',borderRadius:8,padding:'8px 14px',color:'#000',fontWeight:700,fontSize:12.5,display:'flex',alignItems:'center',gap:5}}><Ico n="plus" size={13}/> Add Equipment</button>}
           </div>
         </div>
       </div>
@@ -1862,7 +2102,33 @@ function Kanban(props) {
           {mpSpend>0&&<span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:MP_COLOR,display:'inline-block'}}/>{mpActC>0?'Act.':'Est.'} Manpower {fmt(mpSpend,currency)}</span>}
         </div>
       </div>
-      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+
+      {/* ── Tab bar ── */}
+      <div style={{display:'flex',background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:4,gap:4}}>
+        {[
+          {id:'equipment',icon:'package',label:'Equipment',count:allPi.length},
+          {id:'manpower', icon:'people', label:'Manpower', count:manpower.filter(function(m){return m.projectId===project.id;}).length},
+        ].map(function(t){
+          var act=viewTab===t.id;
+          return (
+            <button key={t.id} onClick={function(){setViewTab(t.id);}}
+              style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:7,padding:'8px 14px',borderRadius:7,border:'none',cursor:'pointer',
+                background:act?project.color+'18':'transparent',
+                color:act?project.color:'var(--c-text4)',
+                fontWeight:act?700:400,fontSize:13,transition:'all .15s'}}>
+              <Ico n={t.icon} size={14}/>
+              {t.label}
+              <span style={{fontSize:11,fontWeight:700,padding:'1px 7px',borderRadius:999,
+                background:act?project.color+'25':'var(--c-bg)',
+                color:act?project.color:'var(--c-text5)',
+                border:'1px solid '+(act?project.color+'30':'var(--c-border2)')
+              }}>{t.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {viewTab==='equipment'&&<div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {STAGES.map(function(stage,si){
 
           var col=pi.filter(function(i){return i.status===stage;}),cfg=SC[stage];
@@ -1949,19 +2215,13 @@ function Kanban(props) {
             </div>
           </div>);
         })}
-      </div>
-      <ManpowerSection
+      </div>}
+
+      {viewTab==='manpower'&&<ManpowerTab
         project={project}
         manpower={manpower}
-        onAdd={function(){setEditMP(null);setShowMP(true);}}
-        onEdit={function(m){setEditMP(m);setShowMP(true);}}
+        onSave={onAddManpower}
         onDelete={onDeleteManpower}
-      />
-      {showMP&&<ManpowerModal
-        entry={editMP}
-        projectId={project.id}
-        onSave={async function(data){await onAddManpower(data);setShowMP(false);setEditMP(null);}}
-        onClose={function(){setShowMP(false);setEditMP(null);}}
       />}
     </div>
   );
