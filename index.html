@@ -1048,7 +1048,7 @@ function ProjectModal(props) {
 /* ── Item Modal ─────────────────────────────────────────────── */
 function ItemModal(props) {
   var item=props.item, projectId=props.projectId, categories=props.categories;
-  var currencies=props.currencies, currency=props.currency, defStage=props.defStage, onSave=props.onSave, onClose=props.onClose;
+  var currencies=props.currencies, currency=props.currency, rates=props.rates, defStage=props.defStage, onSave=props.onSave, onClose=props.onClose;
 
   var activeCurs = (currencies||[]).filter(function(c){return c.is_active!==false;});
   var defaultCur = item ? (item.item_currency||currency||'USD') : (currency||'USD');
@@ -1097,6 +1097,7 @@ function ItemModal(props) {
   var orderBy   = form.order_by_date || calcOrderBy(form.delivery_date, form.lead_time_days);
   var urgency   = urgencyLabel(orderBy, form.status);
   var CUR       = form.item_currency || currency || 'USD';
+  var convertedPreview = (CUR!==currency&&rates&&rates[CUR]&&rates[currency]&&totalCost>0)?convert(totalCost,CUR,currency,rates):null;
 
   async function submit() {
     if (!form.name.trim())  return setError('Item name is required.');
@@ -1196,6 +1197,12 @@ function ItemModal(props) {
             </div>
             <span style={{fontSize:18,fontWeight:700,color:'var(--c-text1)'}}>{fmt(totalCost,CUR)}</span>
           </div>
+          {convertedPreview!=null&&(
+            <div style={{marginTop:6,padding:'9px 14px',background:'rgba(245,158,11,.07)',border:'1px solid rgba(245,158,11,.2)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span style={{fontSize:11.5,color:'#F59E0B'}}>≈ {currency} equivalent (project currency)</span>
+              <span style={{fontSize:16,fontWeight:700,color:'#F59E0B'}}>{fmt(convertedPreview,currency)}</span>
+            </div>
+          )}
         </div>
 
         {/* Delivery + Lead time */}
@@ -1341,13 +1348,17 @@ function Dashboard(props) {
 
 /* ── Projects List ──────────────────────────────────────────── */
 function ProjectsList(props) {
-  var projects=props.projects,items=props.items,currency=props.currency,onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
+  var projects=props.projects,items=props.items,currency=props.currency,rates=props.rates,onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
   var stats=useMemo(function(){return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
     var spend=pi.reduce(function(s,i){return s+i.cost;},0);
+    var projCur=p.currency||currency;
+    var hasMixed=pi.some(function(i){return i.item_currency&&i.item_currency!==projCur;});
+    var convertedSpend=hasMixed&&rates?pi.reduce(function(s,i){var ic=i.item_currency||projCur;return s+((rates[ic]&&rates[projCur])?convert(i.cost,ic,projCur,rates):i.cost);},0):null;
+    var displaySpend=convertedSpend!=null?convertedSpend:spend;
     var sc={};STAGES.forEach(function(s){sc[s]=pi.filter(function(i){return i.status===s;}).length;});
-    return Object.assign({},p,{spend:spend,pct:Math.min(100,Math.round((spend/p.budget)*100)),sc:sc});
-  });},[projects,items]);
+    return Object.assign({},p,{spend:spend,convertedSpend:convertedSpend,hasMixed:hasMixed,displaySpend:displaySpend,pct:Math.min(100,Math.round((displaySpend/p.budget)*100)),sc:sc});
+  });},[projects,items,rates,currency]);
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
       <div style={{fontSize:12,color:'var(--c-text5)'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
@@ -1370,7 +1381,8 @@ function ProjectsList(props) {
                 </div>
               </div>
               <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Budget</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.spend,currency)} / {fmt(p.budget,currency)}</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Budget</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.displaySpend,p.currency||currency)} / {fmt(p.budget,p.currency||currency)}</span></div>
+                {p.hasMixed&&p.convertedSpend!=null&&<div style={{fontSize:10,color:'#F59E0B',textAlign:'right',marginBottom:3}}>≈ converted to {p.currency||currency}</div>}
                 <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
               </div>
               <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
@@ -1389,13 +1401,16 @@ function ProjectsList(props) {
 
 /* ── Kanban ─────────────────────────────────────────────────── */
 function Kanban(props) {
-  var project=props.project,items=props.items,categories=props.categories,currency=props.currency;
+  var project=props.project,items=props.items,categories=props.categories,currency=props.currency,rates=props.rates;
   var onBack=props.onBack,onAdd=props.onAdd,onEdit=props.onEdit,onDelete=props.onDelete,onMove=props.onMove;
   var _s=useState(''),search=_s[0],setSearch=_s[1];
   var pi=useMemo(function(){var q=search.toLowerCase();return items.filter(function(i){return i.projectId===project.id&&(!q||i.name.toLowerCase().includes(q)||i.vendor.toLowerCase().includes(q));});},[items,project.id,search]);
   var allPi=items.filter(function(i){return i.projectId===project.id;});
   var spend=allPi.reduce(function(s,i){return s+i.cost;},0);
-  var pct=Math.min(100,Math.round((spend/project.budget)*100));
+  var hasMixedCur=allPi.some(function(i){return i.item_currency&&i.item_currency!==currency;});
+  var convertedSpend=hasMixedCur&&rates?allPi.reduce(function(s,i){var ic=i.item_currency||currency;return s+((rates[ic]&&rates[currency])?convert(i.cost,ic,currency,rates):i.cost);},0):null;
+  var displaySpend=convertedSpend!=null?convertedSpend:spend;
+  var pct=Math.min(100,Math.round((displaySpend/project.budget)*100));
   var deliv=allPi.filter(function(i){return i.status==='Delivered';}).length;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -1416,7 +1431,7 @@ function Kanban(props) {
         </div>
       </div>
       <div className='kanban-board' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-        {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(spend,currency),pct+'% used'],['Items',allPi.length,'Total'],['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length]].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
+        {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(displaySpend,currency),convertedSpend!=null?'converted to '+currency:pct+'% used'],['Items',allPi.length,'Total'],['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length]].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:r[0]==='Spend'&&convertedSpend!=null?'#F59E0B':'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
       </div>
       <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'11px 16px'}}>
         <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span><span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span></div>
@@ -1437,6 +1452,7 @@ function Kanban(props) {
                 var urgency   = urgencyLabel(orderBy, item.status);
                 var itemCur   = item.item_currency || currency;
                 var totalCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
+                var convertedCost = (itemCur!==currency&&rates&&rates[itemCur]&&rates[currency])?convert(totalCost,itemCur,currency,rates):null;
                 return(
                 <div key={item.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
                   {/* Name */}
@@ -1457,7 +1473,10 @@ function Kanban(props) {
                       </div>
                     )}
                     {item.qty>1&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{item.category}</div>}
-                    {itemCur!==currency&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{itemCur} · project: {currency}</div>}
+                    {itemCur!==currency&&(convertedCost!=null
+                      ?<div style={{fontSize:10.5,color:'#F59E0B',marginTop:3,fontWeight:500}}>≈ {fmt(convertedCost,currency)}</div>
+                      :<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{itemCur} · project: {currency}</div>
+                    )}
                   </div>
 
                   {/* Dates block */}
@@ -2061,8 +2080,8 @@ function App() {
         <main className="main-scroll page-pad" style={{flex:1,overflowY:'auto',padding:'20px 24px',WebkitOverflowScrolling:'touch'}}>
           {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid var(--c-border)',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading…</div>}
           {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
-          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
-          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
+          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
+          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
           {tab==='team'&&<TeamView users={users} currentUser={user} onAdd={function(){setShowAddUser(true);}} onUpdate={updateUser} onDelete={deleteUser} onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
           {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} onToast={toast}/>}
         </main>
@@ -2085,7 +2104,7 @@ function App() {
 
       {/* ── Modals ─────────────────────────────────────────────── */}
       {showProj&&<ProjectModal project={editProj} currencies={currencies} onSave={saveProject} onClose={function(){setShowProj(false);setEditProj(null);}}/>}
-      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currencies={currencies} currency={selProj?selProj.currency||currency:currency} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
+      {showItem&&<ItemModal item={editItem} projectId={pid} categories={categories} currencies={currencies} currency={selProj?selProj.currency||currency:currency} rates={rates} defStage={defStage} onSave={saveItem} onClose={function(){setShowItem(false);setEditItem(null);}}/>}
       {showAddUser&&<AddUserModal onSave={async function(form){await addUser(form);setShowAddUser(false);}} onClose={function(){setShowAddUser(false);}}/>}
 
       {/* ── Toasts ─────────────────────────────────────────────── */}
