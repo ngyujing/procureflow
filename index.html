@@ -217,9 +217,15 @@ var MANPOWER_RATES = {
 var MANPOWER_TYPES = ['Project Manager','Team Lead','Project Engineer','IT Engineer','Operations Manager'];
 var MP_COLOR = '#A78BFA';
 
+/* Normalize any date value to YYYY-MM-DD for <input type="date"> + calcDays.
+   Supabase may return a full ISO timestamp which date inputs cannot display. */
+function dOnly(s){ return s ? String(s).slice(0,10) : ''; }
+/* Clamp FTE to the 0–1 range */
+function clampFte(v){ var n=parseFloat(v); if(isNaN(n))return 0; return Math.max(0,Math.min(1,n)); }
+
 function calcDays(s, e) {
   if (!s || !e) return 0;
-  var sd = new Date(s), ed = new Date(e);
+  var sd = new Date(dOnly(s)), ed = new Date(dOnly(e));
   if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
   return Math.round((ed - sd) / 86400000) + 1;
 }
@@ -288,9 +294,9 @@ function buildCashFlowData(items) {
 
 /* ── Demo data ──────────────────────────────────────────────── */
 var DEMO_PROJECTS = [
-  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, color:'#3B82F6', currency:'USD', created_at:'2026-01-15'},
-  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  color:'#F59E0B', currency:'SGD', created_at:'2026-02-01'},
-  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, color:'#A78BFA', currency:'USD', created_at:'2026-03-10'},
+  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, manpower_budget:150000, color:'#3B82F6', currency:'USD', created_at:'2026-01-15'},
+  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  manpower_budget:0,      color:'#F59E0B', currency:'SGD', created_at:'2026-02-01'},
+  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, manpower_budget:200000, color:'#A78BFA', currency:'USD', created_at:'2026-03-10'},
 ];
 var DEMO_CURRENCIES = [
   {id:'c1', code:'USD', name:'US Dollar',         symbol:'$',   is_active:true},
@@ -321,12 +327,12 @@ var DEMO_ITEMS = [
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_MANPOWER = [
-  {id:'mp1',projectId:'p1',description:'Project Planning & Oversight',      manpower_type:'Project Manager',   qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:1.0,est_hours:480,act_hours:120},
-  {id:'mp2',projectId:'p1',description:'Network & Systems Engineering',     manpower_type:'IT Engineer',       qty:2,start_date:'2026-06-15',end_date:'2026-08-31',fte:1.0,est_hours:320,act_hours:80},
-  {id:'mp3',projectId:'p1',description:'Team Coordination',                 manpower_type:'Team Lead',         qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:0.5,est_hours:240,act_hours:60},
-  {id:'mp4',projectId:'p3',description:'Data Centre Project Management',    manpower_type:'Project Manager',   qty:1,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:520,act_hours:0},
-  {id:'mp5',projectId:'p3',description:'Infrastructure Engineering',        manpower_type:'Project Engineer',  qty:2,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:400,act_hours:0},
-  {id:'mp6',projectId:'p3',description:'Operations Planning',               manpower_type:'Operations Manager',qty:1,start_date:'2026-07-15',end_date:'2026-09-30',fte:0.5,est_hours:200,act_hours:0},
+  {id:'mp1',projectId:'p1',description:'Project Planning & Oversight',      manpower_type:'Project Manager',   qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:1.0,est_hours:92,act_hours:30},
+  {id:'mp2',projectId:'p1',description:'Network & Systems Engineering',     manpower_type:'IT Engineer',       qty:2,start_date:'2026-06-15',end_date:'2026-08-31',fte:1.0,est_hours:78,act_hours:20},
+  {id:'mp3',projectId:'p1',description:'Team Coordination',                 manpower_type:'Team Lead',         qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:0.5,est_hours:92,act_hours:30},
+  {id:'mp4',projectId:'p3',description:'Data Centre Project Management',    manpower_type:'Project Manager',   qty:1,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:92,act_hours:0},
+  {id:'mp5',projectId:'p3',description:'Infrastructure Engineering',        manpower_type:'Project Engineer',  qty:2,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:92,act_hours:0},
+  {id:'mp6',projectId:'p3',description:'Operations Planning',               manpower_type:'Operations Manager',qty:1,start_date:'2026-07-15',end_date:'2026-09-30',fte:0.5,est_hours:78,act_hours:0},
 ];
 var DEMO_USERS = [
   {id:'u1',email:'admin@company.com',   full_name:'John Doe',     role:'Admin',   avatar_color:'#F59E0B',department:'Operations',  phone:'+1 555-0101',is_active:true, created_at:'2026-01-01'},
@@ -1425,24 +1431,25 @@ function ManpowerTab(props) {
 
   var pm=manpower.filter(function(m){return m.projectId===project.id;});
 
-  var grandEstH=0,grandEstC=0,grandActH=0,grandActC=0;
+  var grandEstD=0,grandEstC=0,grandActD=0,grandActC=0;
   pm.forEach(function(m){
-    var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1;
-    grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
-    var fte=m.fte||1;
+    var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+    grandEstD+=(m.est_hours||0)*qty; grandActD+=(m.act_hours||0)*qty;
     grandEstC+=(m.est_hours||0)*qty*fte*rate; grandActC+=(m.act_hours||0)*qty*fte*rate;
   });
 
-  function blankForm(){return{description:'',manpower_type:MANPOWER_TYPES[0],qty:'1',start_date:'',end_date:'',fte:'1',est_hours:'',act_hours:'0'};}
+  /* est_hours column stores estimated days (auto from dates); act_hours stores actual days (manual) */
+  function blankForm(){return{description:'',manpower_type:MANPOWER_TYPES[0],qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
   function upd(form,k,v){return Object.assign({},form,{[k]:v});}
   function calc(form){
     var rate=MANPOWER_RATES[form.manpower_type]||0;
     var qty=Math.max(1,parseInt(form.qty)||1);
-    var estH=parseFloat(form.est_hours)||0;
-    var actH=parseFloat(form.act_hours)||0;
-    var days=calcDays(form.start_date,form.end_date);
-    var fte=parseFloat(form.fte)||1;
-    return{rate:rate,qty:qty,estH:estH,actH:actH,days:days,fte:fte,estC:estH*qty*fte*rate,actC:actH*qty*fte*rate};
+    var days=calcDays(form.start_date,form.end_date);        /* estimated days from start/end */
+    var actDays=Math.max(0,parseFloat(form.act_days)||0);    /* actual days worked (manual) */
+    var fte=clampFte(form.fte);
+    /* Est. Cost = rate/day × no. days × FTE × qty */
+    return{rate:rate,qty:qty,days:days,actDays:actDays,fte:fte,
+           estC:rate*days*fte*qty, actC:rate*actDays*fte*qty};
   }
 
   async function commitNew(){
@@ -1450,8 +1457,8 @@ function ManpowerTab(props) {
     var c=calc(pendingNew); setSaving(true);
     try {
       await onSave({description:pendingNew.description.trim(),manpower_type:pendingNew.manpower_type,qty:c.qty,
-        start_date:pendingNew.start_date||null,end_date:pendingNew.end_date||null,
-        fte:parseFloat(pendingNew.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:project.id});
+        start_date:dOnly(pendingNew.start_date)||null,end_date:dOnly(pendingNew.end_date)||null,
+        fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:project.id});
       setPendingNew(null);
     } catch(e){ /* toast shown by saveManpower */ }
     setSaving(false);
@@ -1461,8 +1468,8 @@ function ManpowerTab(props) {
     var c=calc(editingRow.form); setSaving(true);
     try {
       await onSave({id:editingRow.id,description:editingRow.form.description.trim(),manpower_type:editingRow.form.manpower_type,
-        qty:c.qty,start_date:editingRow.form.start_date||null,end_date:editingRow.form.end_date||null,
-        fte:parseFloat(editingRow.form.fte)||1,est_hours:c.estH,act_hours:c.actH,projectId:editingRow.projectId});
+        qty:c.qty,start_date:dOnly(editingRow.form.start_date)||null,end_date:dOnly(editingRow.form.end_date)||null,
+        fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:editingRow.projectId});
       setEditingRow(null);
     } catch(e){ /* toast shown by saveManpower */ }
     setSaving(false);
@@ -1471,20 +1478,20 @@ function ManpowerTab(props) {
   function exportExcel(){
     if(!window.XLSX){alert('Excel library not loaded.');return;}
     var XLSX=window.XLSX;
-    var cols=['Description of Work','Manpower Type','Rate/hr (USD)','Qty','Start Date','End Date','Days','FTE',
-              'Est. Hours (Total)','Est. Cost (USD)','Act. Hours (Total)','Act. Cost (USD)'];
+    var cols=['Description of Work','Manpower Type','Rate/day (USD)','Qty','Start Date','End Date','Est. Days','FTE',
+              'Est. Cost (USD)','Act. Days','Act. Cost (USD)'];
     var rows=[cols];
     pm.forEach(function(m){
-      var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,days=calcDays(m.start_date,m.end_date);
-      var fte=m.fte||1;
-      rows.push([m.description||'',m.manpower_type,rate,qty,m.start_date||'',m.end_date||'',days,fte,
-                 (m.est_hours||0)*qty,(m.est_hours||0)*qty*fte*rate,(m.act_hours||0)*qty,(m.act_hours||0)*qty*fte*rate]);
+      var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,days=m.est_hours||calcDays(m.start_date,m.end_date);
+      var fte=m.fte!=null?m.fte:1,actDays=m.act_hours||0;
+      rows.push([m.description||'',m.manpower_type,rate,qty,dOnly(m.start_date),dOnly(m.end_date),days,fte,
+                 rate*days*fte*qty, actDays, rate*actDays*fte*qty]);
     });
     rows.push([]);
-    rows.push(['GRAND TOTAL','','','','','','','',grandEstH,grandEstC,grandActH,grandActC]);
-    if(project.manpower_budget>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','','',project.manpower_budget,'','']);
+    rows.push(['GRAND TOTAL','','','','','','','',grandEstC,'',grandActC]);
+    if(project.manpower_budget>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','',project.manpower_budget,'','']);
     var ws=XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols']=[{wch:34},{wch:20},{wch:13},{wch:6},{wch:12},{wch:12},{wch:6},{wch:6},{wch:16},{wch:16},{wch:16},{wch:16}];
+    ws['!cols']=[{wch:34},{wch:20},{wch:14},{wch:6},{wch:12},{wch:12},{wch:9},{wch:6},{wch:16},{wch:10},{wch:16}];
     var wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'Manpower Plan');
     XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
@@ -1512,17 +1519,19 @@ function ManpowerTab(props) {
           </select>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',color:MP_COLOR,fontWeight:700,whiteSpace:'nowrap'})}>
-          ${c.rate.toLocaleString()}/hr
+          ${c.rate.toLocaleString()}/day
         </td>
         <td style={TDE}><input type="number" min="1" step="1" value={form.qty} onChange={function(e){setForm(upd(form,'qty',e.target.value));}} style={Object.assign({},ISM,{width:50})}/></td>
-        <td style={TDE}><input type="date" value={form.start_date} onChange={function(e){setForm(upd(form,'start_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
-        <td style={TDE}><input type="date" value={form.end_date} onChange={function(e){setForm(upd(form,'end_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
+        <td style={TDE}><input type="date" value={dOnly(form.start_date)} onChange={function(e){setForm(upd(form,'start_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
+        <td style={TDE}><input type="date" min={dOnly(form.start_date)||undefined} value={dOnly(form.end_date)} onChange={function(e){setForm(upd(form,'end_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:600,color:c.days>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap'})}>{c.days>0?c.days+'d':'—'}</td>
-        <td style={TDE}><input type="number" min="0" max="2" step="0.1" value={form.fte} onChange={function(e){setForm(upd(form,'fte',e.target.value));}} style={Object.assign({},ISM,{width:50})}/></td>
-        <td style={TDE}><input type="number" min="0" step="0.5" value={form.est_hours} onChange={function(e){setForm(upd(form,'est_hours',e.target.value));}} placeholder="0" style={Object.assign({},ISM,{width:70})}/></td>
-        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'var(--c-text2)',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-        <td style={TDE}><input type="number" min="0" step="0.5" value={form.act_hours} onChange={function(e){setForm(upd(form,'act_hours',e.target.value));}} placeholder="0" style={Object.assign({},ISM,{width:70})}/></td>
-        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'var(--c-text2)',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+        <td style={TDE}><input type="number" min="0" max="1" step="0.1" value={form.fte}
+          onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
+          onBlur={function(e){setForm(upd(form,'fte',String(clampFte(e.target.value))));}}
+          style={Object.assign({},ISM,{width:50})}/></td>
+        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+        <td style={TDE}><input type="number" min="0" step="0.5" value={form.act_days} onChange={function(e){setForm(upd(form,'act_days',e.target.value));}} placeholder="0" style={Object.assign({},ISM,{width:64})}/></td>
+        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#34D399',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={Object.assign({},TDE,{whiteSpace:'nowrap'})}>
           <div style={{display:'flex',gap:5}}>
             <button onClick={onCommit} disabled={saving}
@@ -1566,6 +1575,28 @@ function ManpowerTab(props) {
         </div>
       </div>
 
+      {/* Budget utilization bar */}
+      {project.manpower_budget>0&&(function(){
+        var estPct=Math.min(100,Math.round((grandEstC/project.manpower_budget)*100));
+        var actPct=Math.min(100,Math.round((grandActC/project.manpower_budget)*100));
+        var over=grandEstC>project.manpower_budget;
+        return <div style={{padding:'10px 16px',borderBottom:'1px solid var(--c-border)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+            <span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Manpower Budget Utilization</span>
+            <span style={{fontSize:12,fontWeight:700,color:over?'#F87171':estPct>85?'#F59E0B':'#34D399'}}>{estPct}% estimated</span>
+          </div>
+          <div style={{position:'relative',height:8,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+            <div style={{position:'absolute',height:'100%',borderRadius:999,width:estPct+'%',background:'rgba(167,139,250,.3)'}}/>
+            <div style={{position:'absolute',height:'100%',borderRadius:999,width:actPct+'%',background:'linear-gradient(90deg,'+MP_COLOR+'cc,'+MP_COLOR+')'}}/>
+          </div>
+          <div style={{display:'flex',gap:14,marginTop:5,fontSize:10,color:'var(--c-text5)'}}>
+            <span><span style={{color:'rgba(167,139,250,.5)'}}>▬</span> Est. ${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+            <span><span style={{color:MP_COLOR}}>▬</span> Act. ${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+            <span style={{marginLeft:'auto'}}>Budget ${project.manpower_budget.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+          </div>
+        </div>;
+      })()}
+
       {/* Table */}
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:1060}}>
@@ -1573,15 +1604,14 @@ function ManpowerTab(props) {
             <tr>
               <th style={Object.assign({},TH,{minWidth:180})}>Description of Work</th>
               <th style={Object.assign({},TH,{minWidth:150})}>Type</th>
-              <th style={THR}>Rate/hr</th>
+              <th style={THR}>Rate/day</th>
               <th style={THR}>Qty</th>
               <th style={TH}>Start Date</th>
               <th style={TH}>End Date</th>
               <th style={THR}>Days</th>
               <th style={THR}>FTE</th>
-              <th style={THR}>Est. Hrs</th>
               <th style={THR}>Est. Cost</th>
-              <th style={THR}>Act. Hrs</th>
+              <th style={THR}>Act. Days</th>
               <th style={THR}>Act. Cost</th>
               <th style={TH}></th>
             </tr>
@@ -1591,9 +1621,10 @@ function ManpowerTab(props) {
               if(editingRow&&editingRow.id===m.id){
                 return <EditRow key={m.id} form={editingRow.form} setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}} onCommit={commitEdit} onCancel={function(){setEditingRow(null);}} isNew={false}/>;
               }
-              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte||1;
-              var days=calcDays(m.start_date,m.end_date);
-              var estC=(m.est_hours||0)*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
+              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+              var days=m.est_hours||calcDays(m.start_date,m.end_date);
+              var actDays=m.act_hours||0;
+              var estC=rate*days*fte*qty, actC=rate*actDays*fte*qty;
               return (
                 <tr key={m.id}
                   onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
@@ -1604,19 +1635,18 @@ function ManpowerTab(props) {
                       {m.manpower_type}
                     </span>
                   </td>
-                  <td style={Object.assign({},TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/hr</td>
+                  <td style={Object.assign({},TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/day</td>
                   <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
-                  <td style={TD}>{m.start_date||'—'}</td>
-                  <td style={TD}>{m.end_date||'—'}</td>
-                  <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days||'—'}</td>
-                  <td style={TDR}>{(m.fte||1).toFixed(1)}</td>
-                  <td style={Object.assign({},TDR,{color:'#60A5FA'})}>{((m.est_hours||0)*qty).toLocaleString()}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'var(--c-text2)'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                  <td style={Object.assign({},TDR,{color:'#34D399'})}>{((m.act_hours||0)*qty).toLocaleString()}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'var(--c-text2)'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={TD}>{dOnly(m.start_date)||'—'}</td>
+                  <td style={TD}>{dOnly(m.end_date)||'—'}</td>
+                  <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days?days+'d':'—'}</td>
+                  <td style={TDR}>{fte.toFixed(1)}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TDR,{color:'#34D399'})}>{actDays.toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
                   <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
                     <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
-                      <button onClick={function(){setEditingRow({id:m.id,projectId:m.projectId,form:{description:m.description||'',manpower_type:m.manpower_type,qty:String(m.qty||1),start_date:m.start_date||'',end_date:m.end_date||'',fte:String(m.fte||1),est_hours:String(m.est_hours||''),act_hours:String(m.act_hours||0)}});}}
+                      <button onClick={function(){setEditingRow({id:m.id,projectId:m.projectId,form:{description:m.description||'',manpower_type:m.manpower_type,qty:String(m.qty||1),start_date:dOnly(m.start_date),end_date:dOnly(m.end_date),fte:String(m.fte!=null?m.fte:1),act_days:String(m.act_hours||0)}});}}
                         style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'4px 7px',color:'#60A5FA',display:'flex',cursor:'pointer'}}>
                         <Ico n="edit" size={11}/>
                       </button>
@@ -1639,12 +1669,11 @@ function ManpowerTab(props) {
             <tfoot>
               <tr style={{background:'rgba(245,158,11,.05)'}}>
                 <td colSpan={8} style={{padding:'9px 10px',fontSize:12,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.4px',borderTop:'2px solid rgba(245,158,11,.25)'}}>
-                  Grand Total
+                  Grand Total {project.manpower_budget>0&&<span style={{fontWeight:600,textTransform:'none',color:grandEstC>project.manpower_budget?'#F87171':'#34D399',marginLeft:8}}>{grandEstC>project.manpower_budget?'▲ over':'▼ under'} budget by ${Math.abs(grandEstC-project.manpower_budget).toLocaleString('en-US',{maximumFractionDigits:0})}</span>}
                 </td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>{grandEstH.toLocaleString()}</td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>{grandActH.toLocaleString()}</td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>{grandActD.toLocaleString()}</td>
+                <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
                 <td style={{borderTop:'2px solid rgba(245,158,11,.25)'}}/>
               </tr>
             </tfoot>
@@ -1660,338 +1689,6 @@ function ManpowerTab(props) {
           <Ico n="plus" size={13}/> Add Line
         </button>
       </div>
-    </div>
-  );
-}
-
-/* ── Manpower Modal ─────────────────────────────────────────── */
-function ManpowerModal(props) {
-  var entry=props.entry, projectId=props.projectId, onSave=props.onSave, onClose=props.onClose;
-  var def={
-    description: entry?entry.description||'':'',
-    manpower_type: entry?entry.manpower_type||MANPOWER_TYPES[0]:MANPOWER_TYPES[0],
-    qty: entry?String(entry.qty||1):'1',
-    start_date: entry?entry.start_date||'':'',
-    end_date: entry?entry.end_date||'':'',
-    fte: entry?String(entry.fte||1):'1',
-    est_hours: entry?String(entry.est_hours||''):'',
-    act_hours: entry?String(entry.act_hours||0):'0',
-  };
-  var _f=useState(def),form=_f[0],setForm=_f[1];
-  var _e=useState(''),error=_e[0],setError=_e[1];
-  var _s=useState(false),saving=_s[0],setSaving=_s[1];
-  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
-
-  var days=calcDays(form.start_date,form.end_date);
-  var rate=MANPOWER_RATES[form.manpower_type]||0;
-  var qty=Math.max(1,parseInt(form.qty)||1);
-  var fte=parseFloat(form.fte)||1;
-  var estH=parseFloat(form.est_hours)||0;
-  var actH=parseFloat(form.act_hours)||0;
-  var estCost=estH*qty*fte*rate;
-  var actCost=actH*qty*fte*rate;
-
-  async function submit(){
-    if(!form.description.trim()) return setError('Description of work is required.');
-    if(!form.est_hours||isNaN(+form.est_hours)||+form.est_hours<0) return setError('Estimated hours is required.');
-    setError(''); setSaving(true);
-    try {
-      await onSave({
-        description:form.description.trim(), manpower_type:form.manpower_type,
-        qty:qty, start_date:form.start_date||null, end_date:form.end_date||null,
-        fte:parseFloat(form.fte)||1, est_hours:estH, act_hours:actH,
-        id:entry?entry.id:undefined, projectId:entry?entry.projectId:projectId,
-      });
-    } catch(e){ setError('Save failed: '+(e.message||'unknown')); setSaving(false); }
-  }
-
-  return (
-    <Modal title={entry?'Edit Manpower Entry':'Add Manpower Entry'} onClose={onClose} w={600}
-      footer={<div style={{display:'flex',gap:9}}>
-        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
-        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-          <Ico n="save" size={13}/>{saving?'Saving…':(entry?'Save Changes':'Add Entry')}
-        </button>
-      </div>}>
-      <div className='form-grid-2' style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-
-        {/* Description */}
-        <div style={{gridColumn:'1/-1'}}>
-          <label style={LBL}>Description of Work *</label>
-          <input style={INP} value={form.description} onChange={function(e){set('description',e.target.value);setError('');}} placeholder="e.g. Project Planning & Oversight"/>
-        </div>
-
-        {/* Type */}
-        <div>
-          <label style={LBL}>Manpower Type</label>
-          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.manpower_type} onChange={function(e){set('manpower_type',e.target.value);}}>
-            {MANPOWER_TYPES.map(function(t){return <option key={t} value={t}>{t} — ${MANPOWER_RATES[t].toLocaleString()}/hr</option>;})}
-          </select>
-        </div>
-
-        {/* Qty */}
-        <div>
-          <label style={LBL}>Quantity (Persons)</label>
-          <input style={INP} type="number" min="1" step="1" value={form.qty} onChange={function(e){set('qty',e.target.value);}} placeholder="1"/>
-        </div>
-
-        {/* Start / End dates */}
-        <div>
-          <label style={LBL}>Start Date</label>
-          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.start_date} onChange={function(e){set('start_date',e.target.value);}}/>
-        </div>
-        <div>
-          <label style={LBL}>End Date</label>
-          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.end_date} onChange={function(e){set('end_date',e.target.value);}}/>
-        </div>
-
-        {/* Days (auto) */}
-        <div>
-          <label style={LBL}>Days (Auto-calculated)</label>
-          <div style={{padding:'9px 12px',background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:8,fontSize:13.5,fontWeight:600,color:days>0?'#60A5FA':'var(--c-ghost)'}}>
-            {days>0?days+' day'+(days!==1?'s':''):'— set dates above —'}
-          </div>
-        </div>
-
-        {/* FTE */}
-        <div>
-          <label style={LBL}>FTE</label>
-          <input style={INP} type="number" min="0" max="2" step="0.1" value={form.fte} onChange={function(e){set('fte',e.target.value);}} placeholder="1.0"/>
-        </div>
-
-        {/* Est / Act hours */}
-        <div>
-          <label style={LBL}>Estimated Hours (per person) *</label>
-          <input style={INP} type="number" min="0" step="0.5" value={form.est_hours} onChange={function(e){set('est_hours',e.target.value);setError('');}} placeholder="0"/>
-        </div>
-        <div>
-          <label style={LBL}>Actual Hours (per person)</label>
-          <input style={INP} type="number" min="0" step="0.5" value={form.act_hours} onChange={function(e){set('act_hours',e.target.value);}} placeholder="0"/>
-        </div>
-
-        {/* Cost previews */}
-        <div style={{padding:'11px 14px',background:'rgba(96,165,250,.06)',border:'1px solid rgba(96,165,250,.2)',borderRadius:8}}>
-          <div style={{fontSize:10,color:'#60A5FA',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Estimated Cost</div>
-          <div style={{fontSize:10.5,color:'var(--c-text5)',marginBottom:3}}>{qty} pax × {estH}h × ${rate.toLocaleString()}/hr</div>
-          <div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)'}}>${estCost.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
-        </div>
-        <div style={{padding:'11px 14px',background:'rgba(52,211,153,.06)',border:'1px solid rgba(52,211,153,.2)',borderRadius:8}}>
-          <div style={{fontSize:10,color:'#34D399',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Actual Cost</div>
-          <div style={{fontSize:10.5,color:'var(--c-text5)',marginBottom:3}}>{qty} pax × {actH}h × ${rate.toLocaleString()}/hr</div>
-          <div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)'}}>${actCost.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
-        </div>
-
-        {error&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.3)',borderRadius:8,fontSize:12.5,color:'#F87171'}}><Ico n="alert" size={14}/>{error}</div>}
-      </div>
-    </Modal>
-  );
-}
-
-/* ── Manpower Section ───────────────────────────────────────── */
-function ManpowerSection(props) {
-  var project=props.project, manpower=props.manpower||[];
-  var onAdd=props.onAdd, onEdit=props.onEdit, onDelete=props.onDelete;
-  var _exp=useState(true),expanded=_exp[0],setExpanded=_exp[1];
-
-  var pm=manpower.filter(function(m){return m.projectId===project.id;});
-
-  var grandEstH=0,grandEstC=0,grandActH=0,grandActC=0;
-  pm.forEach(function(m){
-    var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1;
-    grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
-    var fte2=m.fte||1;
-    grandEstC+=(m.est_hours||0)*qty*fte2*rate; grandActC+=(m.act_hours||0)*qty*fte2*rate;
-  });
-
-  var budgeted = project.manpower_budget||0;
-
-  function exportExcel(){
-    if(!window.XLSX){alert('Excel library not loaded.');return;}
-    var XLSX=window.XLSX;
-    var cols=['Description of Work','Manpower Type','Qty (Persons)','Start Date','End Date','Days','FTE',
-              'Est. Hours (Total)','Est. Cost (USD)','Act. Hours (Total)','Act. Cost (USD)'];
-    var rows=[cols];
-    pm.forEach(function(m){
-      var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1, fte=m.fte||1;
-      var days=calcDays(m.start_date,m.end_date);
-      rows.push([
-        m.description||'', m.manpower_type, qty,
-        m.start_date||'', m.end_date||'', days, fte,
-        (m.est_hours||0)*qty, (m.est_hours||0)*qty*fte*rate,
-        (m.act_hours||0)*qty, (m.act_hours||0)*qty*fte*rate,
-      ]);
-    });
-    rows.push([]);
-    rows.push(['─── SUBTOTALS BY TYPE ───']);
-    rows.push(['Type','','Qty','','','','','Est. Hours','Est. Cost','Act. Hours','Act. Cost']);
-    MANPOWER_TYPES.forEach(function(t){
-      var entries=pm.filter(function(m){return m.manpower_type===t;});
-      if(!entries.length)return;
-      var rate=MANPOWER_RATES[t]||0, tEH=0,tAH=0,tEC=0,tAC=0;
-      entries.forEach(function(m){var qty=m.qty||1,fte=m.fte||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*fte*rate;tAC+=(m.act_hours||0)*qty*fte*rate;});
-      rows.push([t,'',entries.reduce(function(s,m){return s+(m.qty||1);},0),'','','','',tEH,tEC,tAH,tAC]);
-    });
-    rows.push([]);
-    rows.push(['GRAND TOTAL','','','','','','',grandEstH,grandEstC,grandActH,grandActC]);
-    if(budgeted>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','',budgeted,'','']);
-
-    var ws=XLSX.utils.aoa_to_sheet(rows);
-    /* Column widths */
-    ws['!cols']=[{wch:34},{wch:20},{wch:14},{wch:12},{wch:12},{wch:7},{wch:6},{wch:16},{wch:16},{wch:16},{wch:16}];
-    var wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb,ws,'Manpower Plan');
-    XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
-  }
-
-  var TH={padding:'8px 10px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
-  var THR=Object.assign({},TH,{textAlign:'right'});
-  var TD={padding:'9px 10px',fontSize:12,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
-  var TDR=Object.assign({},TD,{textAlign:'right'});
-
-  return (
-    <div style={{marginTop:16,background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
-
-      {/* ── Header ── */}
-      <div style={{padding:'13px 18px',borderBottom:expanded?'1px solid var(--c-border)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
-        <div style={{display:'flex',alignItems:'center',gap:10}}>
-          <div style={{width:30,height:30,borderRadius:8,background:'rgba(167,139,250,.12)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-            <Ico n="people" size={14} color={MP_COLOR}/>
-          </div>
-          <div>
-            <div style={{fontSize:13.5,fontWeight:700,color:'var(--c-text1)'}}>Manpower Plan</div>
-            <div style={{fontSize:11,color:'var(--c-text5)'}}>
-              {pm.length} entr{pm.length!==1?'ies':'y'}
-              {budgeted>0&&<span> · Budget: <strong style={{color:MP_COLOR}}>${budgeted.toLocaleString('en-US',{maximumFractionDigits:0})}</strong></span>}
-              &nbsp;·&nbsp;Est: <strong style={{color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
-              &nbsp;·&nbsp;Act: <strong style={{color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
-            </div>
-          </div>
-        </div>
-        <div style={{display:'flex',gap:7,alignItems:'center'}}>
-          <button onClick={exportExcel}
-            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'rgba(52,211,153,.1)',border:'1px solid rgba(52,211,153,.25)',borderRadius:7,color:'#34D399',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-            <Ico n="download" size={13}/> Excel
-          </button>
-          <button onClick={function(){setExpanded(!expanded);}}
-            style={{display:'flex',alignItems:'center',gap:4,padding:'6px 10px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:7,color:'var(--c-text4)',fontSize:12,cursor:'pointer'}}>
-            <Ico n={expanded?'chevr':'chevl'} size={12}/> {expanded?'Hide':'Show'}
-          </button>
-          <button onClick={onAdd}
-            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#F59E0B',border:'none',borderRadius:7,color:'#000',fontSize:12,fontWeight:700,cursor:'pointer'}}>
-            <Ico n="plus" size={12}/> Add Entry
-          </button>
-        </div>
-      </div>
-
-      {expanded && (
-        <div style={{overflowX:'auto'}}>
-          {!pm.length&&(
-            <div style={{padding:'32px',textAlign:'center',color:'var(--c-text5)',fontSize:13}}>
-              No manpower entries yet. Click <strong style={{color:'#F59E0B'}}>Add Entry</strong> to start tracking.
-            </div>
-          )}
-          {pm.length>0&&(
-            <table style={{width:'100%',borderCollapse:'collapse',minWidth:980}}>
-              <thead>
-                <tr>
-                  <th style={TH}>Description of Work</th>
-                  <th style={TH}>Type</th>
-                  <th style={THR}>Qty</th>
-                  <th style={TH}>Start Date</th>
-                  <th style={TH}>End Date</th>
-                  <th style={THR}>Days</th>
-                  <th style={THR}>FTE</th>
-                  <th style={THR}>Est. Hours</th>
-                  <th style={THR}>Est. Cost</th>
-                  <th style={THR}>Act. Hours</th>
-                  <th style={THR}>Act. Cost</th>
-                  <th style={TH}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {MANPOWER_TYPES.map(function(type){
-                  var entries=pm.filter(function(m){return m.manpower_type===type;});
-                  if(!entries.length) return null;
-                  var rate=MANPOWER_RATES[type]||0;
-                  var tEH=0,tAH=0,tEC=0,tAC=0;
-                  entries.forEach(function(m){var qty=m.qty||1,fte=m.fte||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*fte*rate;tAC+=(m.act_hours||0)*qty*fte*rate;});
-                  return [
-                    entries.map(function(m,idx){
-                      var days=calcDays(m.start_date,m.end_date);
-                      var qty=m.qty||1,fte=m.fte||1;
-                      var ec=(m.est_hours||0)*qty*fte*rate, ac=(m.act_hours||0)*qty*fte*rate;
-                      return (
-                        <tr key={m.id} style={{background:idx%2===0?'transparent':'rgba(255,255,255,.015)'}}>
-                          <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
-                          <td style={TD}>
-                            <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:999,fontSize:10.5,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
-                              {m.manpower_type}
-                            </span>
-                          </td>
-                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
-                          <td style={TD}>{m.start_date||'—'}</td>
-                          <td style={TD}>{m.end_date||'—'}</td>
-                          <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days||'—'}</td>
-                          <td style={TDR}>{(m.fte||1).toFixed(1)}</td>
-                          <td style={Object.assign({},TDR,{color:'#60A5FA'})}>{((m.est_hours||0)*qty).toLocaleString()}</td>
-                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>${ec.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                          <td style={Object.assign({},TDR,{color:'#34D399'})}>{((m.act_hours||0)*qty).toLocaleString()}</td>
-                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>${ac.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                          <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
-                            <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
-                              <button onClick={function(){onEdit(m);}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'3px 6px',color:'#60A5FA',display:'flex'}}><Ico n="edit" size={10}/></button>
-                              <button onClick={function(){onDelete(m.id);}} style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'3px 6px',color:'#F87171',display:'flex'}}><Ico n="trash" size={10}/></button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    }),
-                    <tr key={'sub-'+type} style={{background:'rgba(167,139,250,.04)'}}>
-                      <td colSpan={7} style={Object.assign({},TD,{fontWeight:700,color:MP_COLOR,fontSize:11,textTransform:'uppercase',letterSpacing:'.4px'})}>
-                        {type} Subtotal
-                        <span style={{fontWeight:400,color:'var(--c-text5)',fontSize:10,marginLeft:6,textTransform:'none',letterSpacing:0}}>
-                          {entries.length} entr{entries.length!==1?'ies':'y'} · ${rate.toLocaleString()}/hr
-                        </span>
-                      </td>
-                      <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>{tEH.toLocaleString()}</td>
-                      <td style={Object.assign({},TDR,{fontWeight:700,color:MP_COLOR})}>${tEC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                      <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>{tAH.toLocaleString()}</td>
-                      <td style={Object.assign({},TDR,{fontWeight:700,color:MP_COLOR})}>${tAC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                      <td style={TD}/>
-                    </tr>
-                  ];
-                })}
-
-                {/* Grand total */}
-                <tr style={{background:'rgba(245,158,11,.05)'}}>
-                  <td colSpan={7} style={Object.assign({},TD,{fontWeight:700,color:'#F59E0B',fontSize:12.5,textTransform:'uppercase',letterSpacing:'.5px',borderTop:'2px solid rgba(245,158,11,.3)'})}>
-                    Grand Total — All Manpower
-                  </td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>{grandEstH.toLocaleString()}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>{grandActH.toLocaleString()}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                  <td style={Object.assign({},TD,{borderTop:'2px solid rgba(245,158,11,.3)'})}/>
-                </tr>
-
-                {/* Budgeted vs Estimated variance */}
-                {budgeted>0&&(
-                  <tr style={{background:'rgba(96,165,250,.04)'}}>
-                    <td colSpan={7} style={Object.assign({},TD,{fontWeight:600,color:'#60A5FA',fontSize:11.5})}>
-                      Budgeted Manpower Cost
-                    </td>
-                    <td colSpan={2} style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13})}>${budgeted.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                    <td style={Object.assign({},TDR,{fontWeight:600,fontSize:11.5,color:grandEstC>budgeted?'#F87171':'#34D399'})}>
-                      {grandEstC>budgeted?'▲':'▼'} ${Math.abs(grandEstC-budgeted).toLocaleString('en-US',{maximumFractionDigits:0})} {grandEstC>budgeted?'over':'under'} est.
-                    </td>
-                    <td colSpan={2} style={TD}/>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
     </div>
   );
 }
