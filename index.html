@@ -1436,9 +1436,9 @@ function ManpowerTab(props) {
   var manpowerTypes=props.manpowerTypes||DEMO_MANPOWER_TYPES;
   var rm=useMemo(function(){return mpRatesMap(manpowerTypes);},[manpowerTypes]);
 
+  /* pendingNew: {id:null|string, form:{...}} — id is set once first saved */
   var _pn=useState(null),pendingNew=_pn[0],setPendingNew=_pn[1];
   var _er=useState(null),editingRow=_er[0],setEditingRow=_er[1];
-  var _sav=useState(false),saving=_sav[0],setSaving=_sav[1];
 
   var pm=manpower.filter(function(m){return m.projectId===project.id;});
 
@@ -1449,41 +1449,58 @@ function ManpowerTab(props) {
     grandEstC+=(m.est_hours||0)*qty*fte*rate; grandActC+=(m.act_hours||0)*qty*fte*rate;
   });
 
-  /* est_hours column stores estimated days (auto from dates); act_hours stores actual days (manual) */
+  /* Build per-type summary (only types that have entries) */
+  var typeSummary=(function(){
+    var map={};
+    pm.forEach(function(m){
+      var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+      var estC=(m.est_hours||0)*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
+      if(!map[m.manpower_type]) map[m.manpower_type]={type:m.manpower_type,estC:0,actC:0};
+      map[m.manpower_type].estC+=estC; map[m.manpower_type].actC+=actC;
+    });
+    return Object.values(map).sort(function(a,b){return b.estC-a.estC;});
+  })();
+
   function blankForm(){return{description:'',manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
   function upd(form,k,v){return Object.assign({},form,{[k]:v});}
   function calc(form){
     var rate=rm[form.manpower_type]||0;
     var qty=Math.max(1,parseInt(form.qty)||1);
-    var days=calcDays(form.start_date,form.end_date);        /* estimated days from start/end */
-    var actDays=Math.max(0,parseFloat(form.act_days)||0);    /* actual days worked (manual) */
+    var days=calcDays(form.start_date,form.end_date);
+    var actDays=Math.max(0,parseFloat(form.act_days)||0);
     var fte=clampFte(form.fte);
-    /* Est. Cost = rate/day × no. days × FTE × qty */
     return{rate:rate,qty:qty,days:days,actDays:actDays,fte:fte,
            estC:rate*days*fte*qty, actC:rate*actDays*fte*qty};
   }
 
-  async function commitNew(){
-    if(!pendingNew||!pendingNew.description.trim()){setPendingNew(null);return;}
-    var c=calc(pendingNew); setSaving(true);
+  /* Auto-save for new row: called on blur of any field.
+     First call (no id yet) creates the row; subsequent calls update it. */
+  async function autoSaveNew(form){
+    if(!form||!form.description.trim()) return;
+    var c=calc(form);
+    var data={description:form.description.trim(),manpower_type:form.manpower_type,qty:c.qty,
+      start_date:dOnly(form.start_date)||null,end_date:dOnly(form.end_date)||null,
+      fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:project.id};
+    /* if already saved once, update instead of insert */
+    if(pendingNew&&pendingNew.id) data.id=pendingNew.id;
     try {
-      await onSave({description:pendingNew.description.trim(),manpower_type:pendingNew.manpower_type,qty:c.qty,
-        start_date:dOnly(pendingNew.start_date)||null,end_date:dOnly(pendingNew.end_date)||null,
-        fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:project.id});
-      setPendingNew(null);
+      var savedId=await onSave(data);
+      /* capture the id so subsequent blurs are updates */
+      if(savedId&&(!pendingNew||!pendingNew.id)){
+        setPendingNew(function(pn){return pn?Object.assign({},pn,{id:savedId}):null;});
+      }
     } catch(e){ /* toast shown by saveManpower */ }
-    setSaving(false);
   }
-  async function commitEdit(){
-    if(!editingRow)return;
-    var c=calc(editingRow.form); setSaving(true);
+
+  /* Auto-save for existing row being edited */
+  async function autoSaveEdit(form){
+    if(!editingRow||!form.description.trim()) return;
+    var c=calc(form);
     try {
-      await onSave({id:editingRow.id,description:editingRow.form.description.trim(),manpower_type:editingRow.form.manpower_type,
-        qty:c.qty,start_date:dOnly(editingRow.form.start_date)||null,end_date:dOnly(editingRow.form.end_date)||null,
+      await onSave({id:editingRow.id,description:form.description.trim(),manpower_type:form.manpower_type,
+        qty:c.qty,start_date:dOnly(form.start_date)||null,end_date:dOnly(form.end_date)||null,
         fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:editingRow.projectId});
-      setEditingRow(null);
     } catch(e){ /* toast shown by saveManpower */ }
-    setSaving(false);
   }
 
   function exportExcel(){
@@ -1515,45 +1532,68 @@ function ManpowerTab(props) {
   var TDR=Object.assign({},TD,{textAlign:'right'});
   var TDE=Object.assign({},TD,{padding:'6px 8px'});
 
+  /* Inline edit row — no Save button; auto-saves on every field blur */
   function EditRow(rowProps){
-    var form=rowProps.form,setForm=rowProps.setForm,onCommit=rowProps.onCommit,onCancel=rowProps.onCancel,isNew=rowProps.isNew;
+    var form=rowProps.form,setForm=rowProps.setForm,onAutoSave=rowProps.onAutoSave,onCancel=rowProps.onCancel,isNew=rowProps.isNew;
     var c=calc(form);
+    function blur(newForm){ setForm(newForm); onAutoSave(newForm); }
     return (
       <tr style={{background:'rgba(245,158,11,.05)'}}>
         <td style={TDE}>
-          <input autoFocus={isNew} value={form.description} onChange={function(e){setForm(upd(form,'description',e.target.value));}}
+          <input autoFocus={isNew} value={form.description}
+            onChange={function(e){setForm(upd(form,'description',e.target.value));}}
+            onBlur={function(e){blur(upd(form,'description',e.target.value));}}
             placeholder="Description of work…" style={Object.assign({},ISM,{minWidth:160})}/>
         </td>
         <td style={TDE}>
-          <select value={form.manpower_type} onChange={function(e){setForm(upd(form,'manpower_type',e.target.value));}} style={Object.assign({},ISM,{minWidth:150})}>
+          <select value={form.manpower_type}
+            onChange={function(e){var f=upd(form,'manpower_type',e.target.value);setForm(f);onAutoSave(f);}}
+            style={Object.assign({},ISM,{minWidth:150})}>
             {manpowerTypes.map(function(t){return <option key={t.id||t.name} value={t.name}>{t.name}</option>;})}
           </select>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',color:MP_COLOR,fontWeight:700,whiteSpace:'nowrap'})}>
           ${c.rate.toLocaleString()}/day
         </td>
-        <td style={TDE}><input type="number" min="1" step="1" value={form.qty} onChange={function(e){setForm(upd(form,'qty',e.target.value));}} style={Object.assign({},ISM,{width:50})}/></td>
-        <td style={TDE}><input type="date" value={dOnly(form.start_date)} onChange={function(e){setForm(upd(form,'start_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
-        <td style={TDE}><input type="date" min={dOnly(form.start_date)||undefined} value={dOnly(form.end_date)} onChange={function(e){setForm(upd(form,'end_date',e.target.value));}} style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/></td>
+        <td style={TDE}>
+          <input type="number" min="1" step="1" value={form.qty}
+            onChange={function(e){setForm(upd(form,'qty',e.target.value));}}
+            onBlur={function(e){blur(upd(form,'qty',e.target.value));}}
+            style={Object.assign({},ISM,{width:50})}/>
+        </td>
+        <td style={TDE}>
+          <input type="date" value={dOnly(form.start_date)}
+            onChange={function(e){setForm(upd(form,'start_date',e.target.value));}}
+            onBlur={function(e){blur(upd(form,'start_date',e.target.value));}}
+            style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/>
+        </td>
+        <td style={TDE}>
+          <input type="date" min={dOnly(form.start_date)||undefined} value={dOnly(form.end_date)}
+            onChange={function(e){setForm(upd(form,'end_date',e.target.value));}}
+            onBlur={function(e){blur(upd(form,'end_date',e.target.value));}}
+            style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/>
+        </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:600,color:c.days>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap'})}>{c.days>0?c.days+'d':'—'}</td>
-        <td style={TDE}><input type="number" min="0" max="1" step="0.1" value={form.fte}
-          onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
-          onBlur={function(e){setForm(upd(form,'fte',String(clampFte(e.target.value))));}}
-          style={Object.assign({},ISM,{width:50})}/></td>
+        <td style={TDE}>
+          <input type="number" min="0" max="1" step="0.1" value={form.fte}
+            onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
+            onBlur={function(e){var f=upd(form,'fte',String(clampFte(e.target.value)));setForm(f);onAutoSave(f);}}
+            style={Object.assign({},ISM,{width:50})}/>
+        </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-        <td style={TDE}><input type="number" min="0" step="0.5" value={form.act_days} onChange={function(e){setForm(upd(form,'act_days',e.target.value));}} placeholder="0" style={Object.assign({},ISM,{width:64})}/></td>
+        <td style={TDE}>
+          <input type="number" min="0" step="0.5" value={form.act_days}
+            onChange={function(e){setForm(upd(form,'act_days',e.target.value));}}
+            onBlur={function(e){blur(upd(form,'act_days',e.target.value));}}
+            placeholder="0" style={Object.assign({},ISM,{width:64})}/>
+        </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#34D399',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={Object.assign({},TDE,{whiteSpace:'nowrap'})}>
-          <div style={{display:'flex',gap:5}}>
-            <button onClick={onCommit} disabled={saving}
-              style={{background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.3)',borderRadius:6,padding:'4px 10px',color:'#34D399',fontSize:12,fontWeight:700,display:'flex',alignItems:'center',gap:4}}>
-              <Ico n="save" size={11}/>{saving?'…':'Save'}
-            </button>
-            <button onClick={onCancel}
-              style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 8px',color:'var(--c-text5)',fontSize:12}}>
-              <Ico n="x" size={11}/>
-            </button>
-          </div>
+          <button onClick={onCancel}
+            title="Discard / close"
+            style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 8px',color:'var(--c-text5)',fontSize:12,display:'flex',alignItems:'center'}}>
+            <Ico n="x" size={11}/>
+          </button>
         </td>
       </tr>
     );
@@ -1608,7 +1648,7 @@ function ManpowerTab(props) {
         </div>;
       })()}
 
-      {/* Table */}
+      {/* Main line-items table */}
       <div style={{overflowX:'auto'}}>
         <table style={{width:'100%',borderCollapse:'collapse',minWidth:1060}}>
           <thead>
@@ -1630,7 +1670,12 @@ function ManpowerTab(props) {
           <tbody>
             {pm.map(function(m){
               if(editingRow&&editingRow.id===m.id){
-                return <EditRow key={m.id} form={editingRow.form} setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}} onCommit={commitEdit} onCancel={function(){setEditingRow(null);}} isNew={false}/>;
+                return <EditRow key={m.id}
+                  form={editingRow.form}
+                  setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}}
+                  onAutoSave={autoSaveEdit}
+                  onCancel={function(){setEditingRow(null);}}
+                  isNew={false}/>;
               }
               var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
               var days=m.est_hours||calcDays(m.start_date,m.end_date);
@@ -1672,7 +1717,12 @@ function ManpowerTab(props) {
             })}
 
             {/* New pending row */}
-            {pendingNew&&<EditRow form={pendingNew} setForm={setPendingNew} onCommit={commitNew} onCancel={function(){setPendingNew(null);}} isNew={true}/>}
+            {pendingNew&&<EditRow
+              form={pendingNew.form}
+              setForm={function(f){setPendingNew(function(pn){return pn?Object.assign({},pn,{form:f}):null;});}}
+              onAutoSave={autoSaveNew}
+              onCancel={function(){setPendingNew(null);}}
+              isNew={true}/>}
           </tbody>
 
           {/* Grand total footer */}
@@ -1694,12 +1744,48 @@ function ManpowerTab(props) {
 
       {/* Add Line button */}
       <div style={{padding:'10px 14px',borderTop:'1px solid var(--c-border)'}}>
-        <button onClick={function(){if(!pendingNew){setPendingNew(blankForm());}}}
+        <button onClick={function(){if(!pendingNew){setPendingNew({id:null,form:blankForm()});}}}
           disabled={!!pendingNew}
           style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:pendingNew?'var(--c-bg)':'rgba(245,158,11,.1)',border:'1px dashed '+(pendingNew?'var(--c-border2)':'rgba(245,158,11,.4)'),borderRadius:8,color:pendingNew?'var(--c-ghost)':'#F59E0B',fontSize:12.5,fontWeight:600,cursor:pendingNew?'not-allowed':'pointer',transition:'all .15s'}}>
           <Ico n="plus" size={13}/> Add Line
         </button>
       </div>
+
+      {/* Per-type summary table */}
+      {typeSummary.length>0&&(
+        <div style={{borderTop:'2px solid var(--c-border)',padding:'14px 16px'}}>
+          <div style={{fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:10}}>Summary by Role</div>
+          <table style={{width:'100%',borderCollapse:'collapse',maxWidth:520}}>
+            <thead>
+              <tr>
+                {['Role / Type','Est. Cost','Act. Cost'].map(function(h,i){
+                  return <th key={h} style={{padding:'6px 10px',textAlign:i===0?'left':'right',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'}}>{h}</th>;
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {typeSummary.map(function(row,idx){
+                return (
+                  <tr key={row.type} style={{borderTop:'1px solid var(--c-border)'}}>
+                    <td style={{padding:'7px 10px',fontSize:12.5}}>
+                      <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 9px',borderRadius:999,fontSize:11,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
+                        {row.type}
+                      </span>
+                    </td>
+                    <td style={{padding:'7px 10px',textAlign:'right',fontSize:13,fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'}}>${row.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                    <td style={{padding:'7px 10px',textAlign:'right',fontSize:13,fontWeight:700,color:'#34D399',whiteSpace:'nowrap'}}>${row.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  </tr>
+                );
+              })}
+              <tr style={{borderTop:'2px solid rgba(245,158,11,.25)',background:'rgba(245,158,11,.04)'}}>
+                <td style={{padding:'7px 10px',fontSize:12,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.4px'}}>Total</td>
+                <td style={{padding:'7px 10px',textAlign:'right',fontSize:13,fontWeight:700,color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                <td style={{padding:'7px 10px',textAlign:'right',fontSize:13,fontWeight:700,color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -2748,23 +2834,23 @@ function App() {
     if(DEMO||!db){
       if(data.id){
         setManpower(function(p){return p.map(function(m){return m.id===data.id?Object.assign({},m,payload,{id:data.id,projectId:data.projectId}):m;});});
-        toast('Manpower entry updated');
+        return data.id;
       } else {
-        setManpower(function(p){return p.concat([Object.assign({},payload,{id:uid(),projectId:data.projectId})]);});
-        toast('Manpower entry added');
+        var newId=uid();
+        setManpower(function(p){return p.concat([Object.assign({},payload,{id:newId,projectId:data.projectId})]);});
+        return newId;
       }
-      return;
     }
     if(data.id){
       var r=await db.from('manpower_entries').update(payload).eq('id',data.id).select().single();
       if(r.error){toast('Save failed: '+r.error.message,'error');throw new Error(r.error.message);}
       setManpower(function(p){return p.map(function(m){return m.id===data.id?toAppM(r.data):m;});});
-      toast('Manpower entry updated');
+      return data.id;
     } else {
       var r2=await db.from('manpower_entries').insert(Object.assign({},payload,{project_id:data.projectId})).select().single();
       if(r2.error){toast('Save failed: '+r2.error.message,'error');throw new Error(r2.error.message);}
       setManpower(function(p){return p.concat([toAppM(r2.data)]);});
-      toast('Manpower entry added');
+      return r2.data.id;
     }
   }
   async function deleteManpower(id){
