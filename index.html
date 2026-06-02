@@ -1445,8 +1445,10 @@ function ManpowerTab(props) {
   var grandEstD=0,grandEstC=0,grandActD=0,grandActC=0;
   pm.forEach(function(m){
     var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
-    grandEstD+=(m.est_hours||0)*qty; grandActD+=(m.act_hours||0)*qty;
-    grandEstC+=(m.est_hours||0)*qty*fte*rate; grandActC+=(m.act_hours||0)*qty*fte*rate;
+    var days=m.est_hours||calcDays(m.start_date,m.end_date);
+    var actDays=m.act_hours||0;
+    grandEstD+=days*qty; grandActD+=actDays*qty;
+    grandEstC+=days*qty*fte*rate; grandActC+=actDays*qty*fte*rate;
   });
 
   /* Build per-type summary (only types that have entries) */
@@ -1454,7 +1456,8 @@ function ManpowerTab(props) {
     var map={};
     pm.forEach(function(m){
       var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
-      var estC=(m.est_hours||0)*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
+      var days=m.est_hours||calcDays(m.start_date,m.end_date);
+      var estC=days*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
       if(!map[m.manpower_type]) map[m.manpower_type]={type:m.manpower_type,estC:0,actC:0};
       map[m.manpower_type].estC+=estC; map[m.manpower_type].actC+=actC;
     });
@@ -1575,10 +1578,10 @@ function ManpowerTab(props) {
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:600,color:c.days>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap'})}>{c.days>0?c.days+'d':'—'}</td>
         <td style={TDE}>
-          <input type="number" min="0" max="1" step="0.1" value={form.fte}
+          <input type="text" inputMode="decimal" placeholder="0–1" value={form.fte}
             onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
             onBlur={function(e){var f=upd(form,'fte',String(clampFte(e.target.value)));setForm(f);onAutoSave(f);}}
-            style={Object.assign({},ISM,{width:50})}/>
+            style={Object.assign({},ISM,{width:54})}/>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={TDE}>
@@ -1669,6 +1672,8 @@ function ManpowerTab(props) {
           </thead>
           <tbody>
             {pm.map(function(m){
+              /* hide the display row while pendingNew is still open for it */
+              if(pendingNew&&pendingNew.id===m.id) return null;
               if(editingRow&&editingRow.id===m.id){
                 return <EditRow key={m.id}
                   form={editingRow.form}
