@@ -14,6 +14,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%}
@@ -205,6 +206,34 @@ var PC = ['#3B82F6','#F59E0B','#A78BFA','#34D399','#F87171','#22D3EE'];
 var CC = ['#F59E0B','#3B82F6','#10B981','#8B5CF6','#EF4444','#06B6D4'];
 var ROLES = ['Admin','Manager','Member','Viewer'];
 
+/* ── Manpower constants ─────────────────────────────────────── */
+var MANPOWER_RATES = {
+  'Project Manager':    520,
+  'Team Lead':          400,
+  'Project Engineer':   320,
+  'IT Engineer':        680,
+  'Operations Manager': 560,
+};
+var MANPOWER_TYPES = ['Project Manager','Team Lead','Project Engineer','IT Engineer','Operations Manager'];
+var MP_COLOR = '#A78BFA';
+
+function calcDays(s, e) {
+  if (!s || !e) return 0;
+  var sd = new Date(s), ed = new Date(e);
+  if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
+  return Math.round((ed - sd) / 86400000) + 1;
+}
+function mpEstCostForProject(manpower, projectId) {
+  return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
+    return s + (m.est_hours||0)*(m.qty||1)*(MANPOWER_RATES[m.manpower_type]||0);
+  }, 0);
+}
+function mpActCostForProject(manpower, projectId) {
+  return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
+    return s + (m.act_hours||0)*(m.qty||1)*(MANPOWER_RATES[m.manpower_type]||0);
+  }, 0);
+}
+
 /* ── Demo data ──────────────────────────────────────────────── */
 var DEMO_PROJECTS = [
   {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, color:'#3B82F6', currency:'USD', created_at:'2026-01-15'},
@@ -239,6 +268,14 @@ var DEMO_ITEMS = [
   {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16',item_currency:'USD',notes:''},
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
+var DEMO_MANPOWER = [
+  {id:'mp1',projectId:'p1',description:'Project Planning & Oversight',      manpower_type:'Project Manager',   qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:1.0,est_hours:480,act_hours:120},
+  {id:'mp2',projectId:'p1',description:'Network & Systems Engineering',     manpower_type:'IT Engineer',       qty:2,start_date:'2026-06-15',end_date:'2026-08-31',fte:1.0,est_hours:320,act_hours:80},
+  {id:'mp3',projectId:'p1',description:'Team Coordination',                 manpower_type:'Team Lead',         qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:0.5,est_hours:240,act_hours:60},
+  {id:'mp4',projectId:'p3',description:'Data Centre Project Management',    manpower_type:'Project Manager',   qty:1,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:520,act_hours:0},
+  {id:'mp5',projectId:'p3',description:'Infrastructure Engineering',        manpower_type:'Project Engineer',  qty:2,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:400,act_hours:0},
+  {id:'mp6',projectId:'p3',description:'Operations Planning',               manpower_type:'Operations Manager',qty:1,start_date:'2026-07-15',end_date:'2026-09-30',fte:0.5,est_hours:200,act_hours:0},
+];
 var DEMO_USERS = [
   {id:'u1',email:'admin@company.com',   full_name:'John Doe',     role:'Admin',   avatar_color:'#F59E0B',department:'Operations',  phone:'+1 555-0101',is_active:true, created_at:'2026-01-01'},
   {id:'u2',email:'alice@company.com',   full_name:'Alice Chen',   role:'Manager', avatar_color:'#3B82F6',department:'Procurement', phone:'+1 555-0102',is_active:true, created_at:'2026-01-15'},
@@ -260,6 +297,8 @@ function toDB(d)  {
   return r;
 }
 function uid()    { return 'id_' + Math.random().toString(36).slice(2) + Date.now(); }
+function toAppM(r) { return r ? Object.assign({}, r, {projectId: r.project_id}) : null; }
+function toDBM(d)  { var r = Object.assign({}, d, {project_id: d.projectId}); delete r.projectId; return r; }
 function initials(email, name) {
   if (name && name.trim()) {
     var parts = name.trim().split(' ');
@@ -340,6 +379,8 @@ var SVGP = {
   moon:      '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
   globe:     '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
   note:      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+  download:  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  people:    '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
 };
 
 function Ico(props) {
@@ -998,7 +1039,7 @@ function ProjectModal(props) {
   var project=props.project,onSave=props.onSave,onClose=props.onClose,currencies=props.currencies||[];
   var activeCurs=currencies.filter(function(c){return c.is_active!==false;});
   if(!activeCurs.length) activeCurs=[{code:'USD',name:'US Dollar',symbol:'$'}];
-  var _f=useState(project||{name:'',description:'',budget:'',color:PC[0],currency:'USD'});
+  var _f=useState(project?Object.assign({manpower_budget:''}, project, {budget:String(project.budget||''), manpower_budget:String(project.manpower_budget||'')}):{name:'',description:'',budget:'',manpower_budget:'',color:PC[0],currency:'USD'});
   var form=_f[0],setForm=_f[1];
   var _e=useState(''),error=_e[0],setError=_e[1];
   var _s=useState(false),saving=_s[0],setSaving=_s[1];
@@ -1007,7 +1048,7 @@ function ProjectModal(props) {
     if(!form.name.trim())return setError('Project name is required.');
     if(!form.budget||isNaN(+form.budget)||+form.budget<=0)return setError('A valid budget is required.');
     setError('');setSaving(true);
-    await onSave(Object.assign({},form,{budget:+form.budget,id:project&&project.id}));
+    await onSave(Object.assign({},form,{budget:+form.budget,manpower_budget:form.manpower_budget?+form.manpower_budget:0,id:project&&project.id}));
     setSaving(false);
   }
   var footer=(<div style={{display:'flex',gap:9}}>
@@ -1023,7 +1064,7 @@ function ProjectModal(props) {
         <div><label style={LBL}>Description</label><input style={INP} value={form.description} onChange={function(e){set('description',e.target.value);}} placeholder="Brief description…"/></div>
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:14}}>
           <div>
-            <label style={LBL}>Project Budget *</label>
+            <label style={LBL}>Procurement Budget *</label>
             <input style={INP} type="number" min="0" value={form.budget} onChange={function(e){set('budget',e.target.value);}} placeholder="0"/>
           </div>
           <div>
@@ -1032,9 +1073,16 @@ function ProjectModal(props) {
               {activeCurs.map(function(c){return <option key={c.code} value={c.code}>{c.code} — {c.name}</option>;})}            </select>
           </div>
         </div>
+        <div>
+          <label style={LBL}>Budgeted Manpower Cost <span style={{color:'var(--c-ghost)',fontWeight:400}}>(optional)</span></label>
+          <input style={INP} type="number" min="0" value={form.manpower_budget} onChange={function(e){set('manpower_budget',e.target.value);}} placeholder="0"/>
+        </div>
         <div style={{padding:'11px 14px',background:'var(--c-bg)',borderRadius:8,border:'1px solid var(--c-border2)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontSize:12,color:'var(--c-text5)'}}>Budget preview</span>
-          <span style={{fontSize:16,fontWeight:700,color:'var(--c-text1)'}}>{form.budget&&!isNaN(+form.budget)?fmt(+form.budget,form.currency||'USD'):'—'}</span>
+          <span style={{fontSize:12,color:'var(--c-text5)'}}>Total budget preview</span>
+          <div style={{textAlign:'right'}}>
+            <span style={{fontSize:16,fontWeight:700,color:'var(--c-text1)'}}>{(form.budget&&!isNaN(+form.budget))||(form.manpower_budget&&!isNaN(+form.manpower_budget))?fmt((+form.budget||0)+(+form.manpower_budget||0),form.currency||'USD'):'—'}</span>
+            {form.manpower_budget&&!isNaN(+form.manpower_budget)&&+form.manpower_budget>0&&<div style={{fontSize:10.5,color:MP_COLOR,marginTop:2}}>incl. {fmt(+form.manpower_budget,form.currency||'USD')} manpower</div>}
+          </div>
         </div>
         <div><label style={LBL}>Project Colour</label>
           <div style={{display:'flex',gap:9}}>{PC.map(function(c){return <button key={c} onClick={function(){set('color',c);}} style={{width:28,height:28,borderRadius:'50%',background:c,border:form.color===c?'3px solid var(--c-swatch-sel)':'3px solid transparent'}}/>;})}</div>
@@ -1254,11 +1302,346 @@ function ItemModal(props) {
 }
 
 
+/* ── Manpower Modal ─────────────────────────────────────────── */
+function ManpowerModal(props) {
+  var entry=props.entry, projectId=props.projectId, onSave=props.onSave, onClose=props.onClose;
+  var def={
+    description: entry?entry.description||'':'',
+    manpower_type: entry?entry.manpower_type||MANPOWER_TYPES[0]:MANPOWER_TYPES[0],
+    qty: entry?String(entry.qty||1):'1',
+    start_date: entry?entry.start_date||'':'',
+    end_date: entry?entry.end_date||'':'',
+    fte: entry?String(entry.fte||1):'1',
+    est_hours: entry?String(entry.est_hours||''):'',
+    act_hours: entry?String(entry.act_hours||0):'0',
+  };
+  var _f=useState(def),form=_f[0],setForm=_f[1];
+  var _e=useState(''),error=_e[0],setError=_e[1];
+  var _s=useState(false),saving=_s[0],setSaving=_s[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+
+  var days=calcDays(form.start_date,form.end_date);
+  var rate=MANPOWER_RATES[form.manpower_type]||0;
+  var qty=Math.max(1,parseInt(form.qty)||1);
+  var estH=parseFloat(form.est_hours)||0;
+  var actH=parseFloat(form.act_hours)||0;
+  var estCost=estH*qty*rate;
+  var actCost=actH*qty*rate;
+
+  async function submit(){
+    if(!form.description.trim()) return setError('Description of work is required.');
+    if(!form.est_hours||isNaN(+form.est_hours)||+form.est_hours<0) return setError('Estimated hours is required.');
+    setError(''); setSaving(true);
+    try {
+      await onSave({
+        description:form.description.trim(), manpower_type:form.manpower_type,
+        qty:qty, start_date:form.start_date||null, end_date:form.end_date||null,
+        fte:parseFloat(form.fte)||1, est_hours:estH, act_hours:actH,
+        id:entry?entry.id:undefined, projectId:entry?entry.projectId:projectId,
+      });
+    } catch(e){ setError('Save failed: '+(e.message||'unknown')); setSaving(false); }
+  }
+
+  return (
+    <Modal title={entry?'Edit Manpower Entry':'Add Manpower Entry'} onClose={onClose} w={600}
+      footer={<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
+        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="save" size={13}/>{saving?'Saving…':(entry?'Save Changes':'Add Entry')}
+        </button>
+      </div>}>
+      <div className='form-grid-2' style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+
+        {/* Description */}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Description of Work *</label>
+          <input style={INP} value={form.description} onChange={function(e){set('description',e.target.value);setError('');}} placeholder="e.g. Project Planning & Oversight"/>
+        </div>
+
+        {/* Type */}
+        <div>
+          <label style={LBL}>Manpower Type</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.manpower_type} onChange={function(e){set('manpower_type',e.target.value);}}>
+            {MANPOWER_TYPES.map(function(t){return <option key={t} value={t}>{t} — ${MANPOWER_RATES[t].toLocaleString()}/hr</option>;})}
+          </select>
+        </div>
+
+        {/* Qty */}
+        <div>
+          <label style={LBL}>Quantity (Persons)</label>
+          <input style={INP} type="number" min="1" step="1" value={form.qty} onChange={function(e){set('qty',e.target.value);}} placeholder="1"/>
+        </div>
+
+        {/* Start / End dates */}
+        <div>
+          <label style={LBL}>Start Date</label>
+          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.start_date} onChange={function(e){set('start_date',e.target.value);}}/>
+        </div>
+        <div>
+          <label style={LBL}>End Date</label>
+          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.end_date} onChange={function(e){set('end_date',e.target.value);}}/>
+        </div>
+
+        {/* Days (auto) */}
+        <div>
+          <label style={LBL}>Days (Auto-calculated)</label>
+          <div style={{padding:'9px 12px',background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:8,fontSize:13.5,fontWeight:600,color:days>0?'#60A5FA':'var(--c-ghost)'}}>
+            {days>0?days+' day'+(days!==1?'s':''):'— set dates above —'}
+          </div>
+        </div>
+
+        {/* FTE */}
+        <div>
+          <label style={LBL}>FTE</label>
+          <input style={INP} type="number" min="0" max="2" step="0.1" value={form.fte} onChange={function(e){set('fte',e.target.value);}} placeholder="1.0"/>
+        </div>
+
+        {/* Est / Act hours */}
+        <div>
+          <label style={LBL}>Estimated Hours (per person) *</label>
+          <input style={INP} type="number" min="0" step="0.5" value={form.est_hours} onChange={function(e){set('est_hours',e.target.value);setError('');}} placeholder="0"/>
+        </div>
+        <div>
+          <label style={LBL}>Actual Hours (per person)</label>
+          <input style={INP} type="number" min="0" step="0.5" value={form.act_hours} onChange={function(e){set('act_hours',e.target.value);}} placeholder="0"/>
+        </div>
+
+        {/* Cost previews */}
+        <div style={{padding:'11px 14px',background:'rgba(96,165,250,.06)',border:'1px solid rgba(96,165,250,.2)',borderRadius:8}}>
+          <div style={{fontSize:10,color:'#60A5FA',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Estimated Cost</div>
+          <div style={{fontSize:10.5,color:'var(--c-text5)',marginBottom:3}}>{qty} pax × {estH}h × ${rate.toLocaleString()}/hr</div>
+          <div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)'}}>${estCost.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>
+        <div style={{padding:'11px 14px',background:'rgba(52,211,153,.06)',border:'1px solid rgba(52,211,153,.2)',borderRadius:8}}>
+          <div style={{fontSize:10,color:'#34D399',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Actual Cost</div>
+          <div style={{fontSize:10.5,color:'var(--c-text5)',marginBottom:3}}>{qty} pax × {actH}h × ${rate.toLocaleString()}/hr</div>
+          <div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)'}}>${actCost.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>
+
+        {error&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.3)',borderRadius:8,fontSize:12.5,color:'#F87171'}}><Ico n="alert" size={14}/>{error}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Manpower Section ───────────────────────────────────────── */
+function ManpowerSection(props) {
+  var project=props.project, manpower=props.manpower||[];
+  var onAdd=props.onAdd, onEdit=props.onEdit, onDelete=props.onDelete;
+  var _exp=useState(true),expanded=_exp[0],setExpanded=_exp[1];
+
+  var pm=manpower.filter(function(m){return m.projectId===project.id;});
+
+  var grandEstH=0,grandEstC=0,grandActH=0,grandActC=0;
+  pm.forEach(function(m){
+    var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1;
+    grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
+    grandEstC+=(m.est_hours||0)*qty*rate; grandActC+=(m.act_hours||0)*qty*rate;
+  });
+
+  var budgeted = project.manpower_budget||0;
+
+  function exportExcel(){
+    if(!window.XLSX){alert('Excel library not loaded.');return;}
+    var XLSX=window.XLSX;
+    var cols=['Description of Work','Manpower Type','Qty (Persons)','Start Date','End Date','Days','FTE',
+              'Est. Hours (Total)','Est. Cost (USD)','Act. Hours (Total)','Act. Cost (USD)'];
+    var rows=[cols];
+    pm.forEach(function(m){
+      var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1;
+      var days=calcDays(m.start_date,m.end_date);
+      rows.push([
+        m.description||'', m.manpower_type, qty,
+        m.start_date||'', m.end_date||'', days, m.fte||1,
+        (m.est_hours||0)*qty, (m.est_hours||0)*qty*rate,
+        (m.act_hours||0)*qty, (m.act_hours||0)*qty*rate,
+      ]);
+    });
+    rows.push([]);
+    rows.push(['─── SUBTOTALS BY TYPE ───']);
+    rows.push(['Type','','Qty','','','','','Est. Hours','Est. Cost','Act. Hours','Act. Cost']);
+    MANPOWER_TYPES.forEach(function(t){
+      var entries=pm.filter(function(m){return m.manpower_type===t;});
+      if(!entries.length)return;
+      var rate=MANPOWER_RATES[t]||0, tEH=0,tAH=0,tEC=0,tAC=0;
+      entries.forEach(function(m){var qty=m.qty||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*rate;tAC+=(m.act_hours||0)*qty*rate;});
+      rows.push([t,'',entries.reduce(function(s,m){return s+(m.qty||1);},0),'','','','',tEH,tEC,tAH,tAC]);
+    });
+    rows.push([]);
+    rows.push(['GRAND TOTAL','','','','','','',grandEstH,grandEstC,grandActH,grandActC]);
+    if(budgeted>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','',budgeted,'','']);
+
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    /* Column widths */
+    ws['!cols']=[{wch:34},{wch:20},{wch:14},{wch:12},{wch:12},{wch:7},{wch:6},{wch:16},{wch:16},{wch:16},{wch:16}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Manpower Plan');
+    XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
+  }
+
+  var TH={padding:'8px 10px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
+  var THR=Object.assign({},TH,{textAlign:'right'});
+  var TD={padding:'9px 10px',fontSize:12,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
+  var TDR=Object.assign({},TD,{textAlign:'right'});
+
+  return (
+    <div style={{marginTop:16,background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+
+      {/* ── Header ── */}
+      <div style={{padding:'13px 18px',borderBottom:expanded?'1px solid var(--c-border)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:30,height:30,borderRadius:8,background:'rgba(167,139,250,.12)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ico n="people" size={14} color={MP_COLOR}/>
+          </div>
+          <div>
+            <div style={{fontSize:13.5,fontWeight:700,color:'var(--c-text1)'}}>Manpower Plan</div>
+            <div style={{fontSize:11,color:'var(--c-text5)'}}>
+              {pm.length} entr{pm.length!==1?'ies':'y'}
+              {budgeted>0&&<span> · Budget: <strong style={{color:MP_COLOR}}>${budgeted.toLocaleString('en-US',{maximumFractionDigits:0})}</strong></span>}
+              &nbsp;·&nbsp;Est: <strong style={{color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
+              &nbsp;·&nbsp;Act: <strong style={{color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:7,alignItems:'center'}}>
+          <button onClick={exportExcel}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'rgba(52,211,153,.1)',border:'1px solid rgba(52,211,153,.25)',borderRadius:7,color:'#34D399',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            <Ico n="download" size={13}/> Excel
+          </button>
+          <button onClick={function(){setExpanded(!expanded);}}
+            style={{display:'flex',alignItems:'center',gap:4,padding:'6px 10px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:7,color:'var(--c-text4)',fontSize:12,cursor:'pointer'}}>
+            <Ico n={expanded?'chevr':'chevl'} size={12}/> {expanded?'Hide':'Show'}
+          </button>
+          <button onClick={onAdd}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#F59E0B',border:'none',borderRadius:7,color:'#000',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+            <Ico n="plus" size={12}/> Add Entry
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{overflowX:'auto'}}>
+          {!pm.length&&(
+            <div style={{padding:'32px',textAlign:'center',color:'var(--c-text5)',fontSize:13}}>
+              No manpower entries yet. Click <strong style={{color:'#F59E0B'}}>Add Entry</strong> to start tracking.
+            </div>
+          )}
+          {pm.length>0&&(
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:980}}>
+              <thead>
+                <tr>
+                  <th style={TH}>Description of Work</th>
+                  <th style={TH}>Type</th>
+                  <th style={THR}>Qty</th>
+                  <th style={TH}>Start Date</th>
+                  <th style={TH}>End Date</th>
+                  <th style={THR}>Days</th>
+                  <th style={THR}>FTE</th>
+                  <th style={THR}>Est. Hours</th>
+                  <th style={THR}>Est. Cost</th>
+                  <th style={THR}>Act. Hours</th>
+                  <th style={THR}>Act. Cost</th>
+                  <th style={TH}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {MANPOWER_TYPES.map(function(type){
+                  var entries=pm.filter(function(m){return m.manpower_type===type;});
+                  if(!entries.length) return null;
+                  var rate=MANPOWER_RATES[type]||0;
+                  var tEH=0,tAH=0,tEC=0,tAC=0;
+                  entries.forEach(function(m){var qty=m.qty||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*rate;tAC+=(m.act_hours||0)*qty*rate;});
+                  return [
+                    entries.map(function(m,idx){
+                      var days=calcDays(m.start_date,m.end_date);
+                      var qty=m.qty||1;
+                      var ec=(m.est_hours||0)*qty*rate, ac=(m.act_hours||0)*qty*rate;
+                      return (
+                        <tr key={m.id} style={{background:idx%2===0?'transparent':'rgba(255,255,255,.015)'}}>
+                          <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
+                          <td style={TD}>
+                            <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:999,fontSize:10.5,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
+                              {m.manpower_type}
+                            </span>
+                          </td>
+                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
+                          <td style={TD}>{m.start_date||'—'}</td>
+                          <td style={TD}>{m.end_date||'—'}</td>
+                          <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days||'—'}</td>
+                          <td style={TDR}>{(m.fte||1).toFixed(1)}</td>
+                          <td style={Object.assign({},TDR,{color:'#60A5FA'})}>{((m.est_hours||0)*qty).toLocaleString()}</td>
+                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>${ec.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                          <td style={Object.assign({},TDR,{color:'#34D399'})}>{((m.act_hours||0)*qty).toLocaleString()}</td>
+                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>${ac.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                          <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
+                            <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+                              <button onClick={function(){onEdit(m);}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'3px 6px',color:'#60A5FA',display:'flex'}}><Ico n="edit" size={10}/></button>
+                              <button onClick={function(){onDelete(m.id);}} style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'3px 6px',color:'#F87171',display:'flex'}}><Ico n="trash" size={10}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }),
+                    <tr key={'sub-'+type} style={{background:'rgba(167,139,250,.04)'}}>
+                      <td colSpan={7} style={Object.assign({},TD,{fontWeight:700,color:MP_COLOR,fontSize:11,textTransform:'uppercase',letterSpacing:'.4px'})}>
+                        {type} Subtotal
+                        <span style={{fontWeight:400,color:'var(--c-text5)',fontSize:10,marginLeft:6,textTransform:'none',letterSpacing:0}}>
+                          {entries.length} entr{entries.length!==1?'ies':'y'} · ${rate.toLocaleString()}/hr
+                        </span>
+                      </td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>{tEH.toLocaleString()}</td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:MP_COLOR})}>${tEC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>{tAH.toLocaleString()}</td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:MP_COLOR})}>${tAC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                      <td style={TD}/>
+                    </tr>
+                  ];
+                })}
+
+                {/* Grand total */}
+                <tr style={{background:'rgba(245,158,11,.05)'}}>
+                  <td colSpan={7} style={Object.assign({},TD,{fontWeight:700,color:'#F59E0B',fontSize:12.5,textTransform:'uppercase',letterSpacing:'.5px',borderTop:'2px solid rgba(245,158,11,.3)'})}>
+                    Grand Total — All Manpower
+                  </td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>{grandEstH.toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>{grandActH.toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TD,{borderTop:'2px solid rgba(245,158,11,.3)'})}/>
+                </tr>
+
+                {/* Budgeted vs Estimated variance */}
+                {budgeted>0&&(
+                  <tr style={{background:'rgba(96,165,250,.04)'}}>
+                    <td colSpan={7} style={Object.assign({},TD,{fontWeight:600,color:'#60A5FA',fontSize:11.5})}>
+                      Budgeted Manpower Cost
+                    </td>
+                    <td colSpan={2} style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13})}>${budgeted.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                    <td style={Object.assign({},TDR,{fontWeight:600,fontSize:11.5,color:grandEstC>budgeted?'#F87171':'#34D399'})}>
+                      {grandEstC>budgeted?'▲':'▼'} ${Math.abs(grandEstC-budgeted).toLocaleString('en-US',{maximumFractionDigits:0})} {grandEstC>budgeted?'over':'under'} est.
+                    </td>
+                    <td colSpan={2} style={TD}/>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Dashboard ──────────────────────────────────────────────── */
 function Dashboard(props) {
-  var projects=props.projects,items=props.items,currency=props.currency;
-  var tBudget=projects.reduce(function(s,p){return s+p.budget;},0);
-  var tSpend=items.reduce(function(s,i){return s+i.cost;},0);
+  var projects=props.projects,items=props.items,currency=props.currency,manpower=props.manpower||[];
+  var tBudget=projects.reduce(function(s,p){return s+(p.budget||0)+(p.manpower_budget||0);},0);
+  var tProcureSpend=items.reduce(function(s,i){return s+i.cost;},0);
+  var tManpowerSpend=projects.reduce(function(s,p){
+    var ac=mpActCostForProject(manpower,p.id);
+    return s+(ac>0?ac:mpEstCostForProject(manpower,p.id));
+  },0);
+  var tSpend=tProcureSpend+tManpowerSpend;
   var deliv=items.filter(function(i){return i.status==='Delivered';}).length;
   var pct=tBudget?Math.min(100,Math.round((tSpend/tBudget)*100)):0;
   var barCol=pct>85?'#EF4444':pct>65?'#F59E0B':'#34D399';
@@ -1327,16 +1710,24 @@ function Dashboard(props) {
         {projects.map(function(p,idx){
           var pi=items.filter(function(i){return i.projectId===p.id;});
           var ps=pi.reduce(function(s,i){return s+i.cost;},0);
-          var pp=p.budget?Math.min(100,Math.round((ps/p.budget)*100)):0;
+          var mpAct=mpActCostForProject(manpower,p.id);
+          var mpEst=mpEstCostForProject(manpower,p.id);
+          var mpS=mpAct>0?mpAct:mpEst;
+          var totalSpend=ps+mpS;
+          var totalBudget=(p.budget||0)+(p.manpower_budget||0);
+          var pp=totalBudget?Math.min(100,Math.round((totalSpend/totalBudget)*100)):0;
           var pd=pi.filter(function(i){return i.status==='Delivered';}).length;
           return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:14,padding:'10px 0',borderBottom:idx<projects.length-1?'1px solid var(--c-border)':'none'}}>
             <div style={{width:9,height:9,borderRadius:'50%',background:p.color,flexShrink:0}}/>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginBottom:5}}>{p.name}</div>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                <span style={{fontSize:13,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                {mpS>0&&<span style={{fontSize:10,color:MP_COLOR,background:'rgba(167,139,250,.1)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(167,139,250,.2)',whiteSpace:'nowrap',flexShrink:0}}>+MP</span>}
+              </div>
               <div style={{height:3,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pp+'%',background:p.color}}/></div>
             </div>
             <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:12.5,fontWeight:600,color:'var(--c-text2)'}}>{fmt(ps,currency)}</div>
+              <div style={{fontSize:12.5,fontWeight:600,color:'var(--c-text2)'}}>{fmt(totalSpend,currency)}</div>
               <div style={{fontSize:11,color:'var(--c-text5)'}}>{pd}/{pi.length} delivered</div>
             </div>
           </div>);
@@ -1348,17 +1739,22 @@ function Dashboard(props) {
 
 /* ── Projects List ──────────────────────────────────────────── */
 function ProjectsList(props) {
-  var projects=props.projects,items=props.items,currency=props.currency,rates=props.rates,onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
+  var projects=props.projects,items=props.items,currency=props.currency,rates=props.rates,manpower=props.manpower||[],onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
   var stats=useMemo(function(){return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
     var spend=pi.reduce(function(s,i){return s+i.cost;},0);
     var projCur=p.currency||currency;
     var hasMixed=pi.some(function(i){return i.item_currency&&i.item_currency!==projCur;});
     var convertedSpend=hasMixed&&rates?pi.reduce(function(s,i){var ic=i.item_currency||projCur;return s+((rates[ic]&&rates[projCur])?convert(i.cost,ic,projCur,rates):i.cost);},0):null;
-    var displaySpend=convertedSpend!=null?convertedSpend:spend;
+    var procureSpend=convertedSpend!=null?convertedSpend:spend;
+    var mpAct=mpActCostForProject(manpower,p.id);
+    var mpEst=mpEstCostForProject(manpower,p.id);
+    var mpSpend=mpAct>0?mpAct:mpEst;
+    var displaySpend=procureSpend+mpSpend;
+    var totalBudget=(p.budget||0)+(p.manpower_budget||0);
     var sc={};STAGES.forEach(function(s){sc[s]=pi.filter(function(i){return i.status===s;}).length;});
-    return Object.assign({},p,{spend:spend,convertedSpend:convertedSpend,hasMixed:hasMixed,displaySpend:displaySpend,pct:Math.min(100,Math.round((displaySpend/p.budget)*100)),sc:sc});
-  });},[projects,items,rates,currency]);
+    return Object.assign({},p,{spend:spend,convertedSpend:convertedSpend,hasMixed:hasMixed,displaySpend:displaySpend,pct:Math.min(100,Math.round((displaySpend/totalBudget)*100)),sc:sc,mpSpend:mpSpend,totalBudget:totalBudget});
+  });},[projects,items,rates,currency,manpower]);
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
       <div style={{fontSize:12,color:'var(--c-text5)'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
@@ -1381,8 +1777,9 @@ function ProjectsList(props) {
                 </div>
               </div>
               <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Budget</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.displaySpend,p.currency||currency)} / {fmt(p.budget,p.currency||currency)}</span></div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Total Spend</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.displaySpend,p.currency||currency)} / {fmt(p.totalBudget,p.currency||currency)}</span></div>
                 {p.hasMixed&&p.convertedSpend!=null&&<div style={{fontSize:10,color:'#F59E0B',textAlign:'right',marginBottom:3}}>≈ converted to {p.currency||currency}</div>}
+                {p.mpSpend>0&&<div style={{fontSize:10,color:MP_COLOR,textAlign:'right',marginBottom:3}}>incl. ${p.mpSpend.toLocaleString('en-US',{maximumFractionDigits:0})} manpower</div>}
                 <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
               </div>
               <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
@@ -1403,14 +1800,22 @@ function ProjectsList(props) {
 function Kanban(props) {
   var project=props.project,items=props.items,categories=props.categories,currency=props.currency,rates=props.rates;
   var onBack=props.onBack,onAdd=props.onAdd,onEdit=props.onEdit,onDelete=props.onDelete,onMove=props.onMove;
+  var manpower=props.manpower||[],onAddManpower=props.onAddManpower,onEditManpower=props.onEditManpower,onDeleteManpower=props.onDeleteManpower;
   var _s=useState(''),search=_s[0],setSearch=_s[1];
+  var _sm=useState(false),showMP=_sm[0],setShowMP=_sm[1];
+  var _em=useState(null),editMP=_em[0],setEditMP=_em[1];
   var pi=useMemo(function(){var q=search.toLowerCase();return items.filter(function(i){return i.projectId===project.id&&(!q||i.name.toLowerCase().includes(q)||i.vendor.toLowerCase().includes(q));});},[items,project.id,search]);
   var allPi=items.filter(function(i){return i.projectId===project.id;});
   var spend=allPi.reduce(function(s,i){return s+i.cost;},0);
   var hasMixedCur=allPi.some(function(i){return i.item_currency&&i.item_currency!==currency;});
   var convertedSpend=hasMixedCur&&rates?allPi.reduce(function(s,i){var ic=i.item_currency||currency;return s+((rates[ic]&&rates[currency])?convert(i.cost,ic,currency,rates):i.cost);},0):null;
-  var displaySpend=convertedSpend!=null?convertedSpend:spend;
-  var pct=Math.min(100,Math.round((displaySpend/project.budget)*100));
+  var procureSpend=convertedSpend!=null?convertedSpend:spend;
+  var mpEstC=mpEstCostForProject(manpower,project.id);
+  var mpActC=mpActCostForProject(manpower,project.id);
+  var mpSpend=mpActC>0?mpActC:mpEstC;
+  var displaySpend=procureSpend+mpSpend;
+  var totalBudget=(project.budget||0)+(project.manpower_budget||0);
+  var pct=Math.min(100,Math.round((displaySpend/Math.max(1,totalBudget))*100));
   var deliv=allPi.filter(function(i){return i.status==='Delivered';}).length;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -1430,15 +1835,36 @@ function Kanban(props) {
           </div>
         </div>
       </div>
-      <div className='kanban-board' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
-        {[['Budget',fmt(project.budget,currency),'Allocated'],['Spend',fmt(displaySpend,currency),convertedSpend!=null?'converted to '+currency:pct+'% used'],['Items',allPi.length,'Total'],['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length]].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:r[0]==='Spend'&&convertedSpend!=null?'#F59E0B':'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
+      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
+        {[
+          ['Budget',fmt(totalBudget,currency),project.manpower_budget>0?'incl. '+fmt(project.manpower_budget,currency)+' manpower':'Allocated'],
+          ['Total Spend',fmt(displaySpend,currency),pct+'% utilized'],
+          ['Manpower',fmt(mpSpend,currency),mpActC>0?'actual cost':'estimated cost'],
+          ['Procurement',fmt(procureSpend,currency),convertedSpend!=null?'converted to '+currency:allPi.length+' items'],
+          ['Items',allPi.length,'Total'],
+          ['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length],
+        ].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:18,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:(r[0]==='Manpower')?MP_COLOR:'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
       </div>
       <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'11px 16px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}><span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span><span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span></div>
-        <div style={{height:6,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/></div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:5}}>
+          <div>
+            <span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span>
+            {project.manpower_budget>0&&<span style={{fontSize:10,color:MP_COLOR,marginLeft:8}}>Procurement + Manpower</span>}
+          </div>
+          <span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span>
+        </div>
+        <div style={{height:6,background:'var(--c-bg)',borderRadius:999,position:'relative'}}>
+          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/>
+          {totalBudget>0&&mpSpend>0&&<div style={{position:'absolute',top:0,left:Math.min(100,Math.round((procureSpend/totalBudget)*100))+'%',height:'100%',borderRadius:'0 999px 999px 0',width:Math.min(100-Math.min(100,Math.round((procureSpend/totalBudget)*100)),Math.round((mpSpend/totalBudget)*100))+'%',background:MP_COLOR}}/>}
+        </div>
+        <div style={{display:'flex',gap:12,marginTop:6,fontSize:10,color:'var(--c-text5)'}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:project.color,display:'inline-block'}}/>Procurement {fmt(procureSpend,currency)}</span>
+          {mpSpend>0&&<span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:MP_COLOR,display:'inline-block'}}/>{mpActC>0?'Act.':'Est.'} Manpower {fmt(mpSpend,currency)}</span>}
+        </div>
       </div>
       <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {STAGES.map(function(stage,si){
+
           var col=pi.filter(function(i){return i.status===stage;}),cfg=SC[stage];
           return(<div key={stage} className='kanban-col' style={{background:'var(--c-kanban)',border:'1px solid var(--c-border)',borderRadius:12,display:'flex',flexDirection:'column',minHeight:280}}>
             <div style={{padding:'11px 12px 9px',borderBottom:'2px solid '+cfg.color+'35',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
@@ -1524,6 +1950,19 @@ function Kanban(props) {
           </div>);
         })}
       </div>
+      <ManpowerSection
+        project={project}
+        manpower={manpower}
+        onAdd={function(){setEditMP(null);setShowMP(true);}}
+        onEdit={function(m){setEditMP(m);setShowMP(true);}}
+        onDelete={onDeleteManpower}
+      />
+      {showMP&&<ManpowerModal
+        entry={editMP}
+        projectId={project.id}
+        onSave={async function(data){await onAddManpower(data);setShowMP(false);setEditMP(null);}}
+        onClose={function(){setShowMP(false);setEditMP(null);}}
+      />}
     </div>
   );
 }
@@ -1730,6 +2169,7 @@ function App() {
   var _ca=useState(DEMO_CATS),categories=_ca[0],setCats=_ca[1];
   var _cr=useState(DEMO_CURRENCIES),currencies=_cr[0],setCurrencies=_cr[1];
   var _us=useState(DEMO_USERS),users=_us[0],setUsers=_us[1];
+  var _mp=useState(DEMO_MANPOWER),manpower=_mp[0],setManpower=_mp[1];
   var _dl=useState(false),dataLoading=_dl[0],setDataLoading=_dl[1];
   var _rt=useState(null),rates=_rt[0],setRates=_rt[1];
   var _ru=useState(''),ratesUpdated=_ru[0],setRatesUpdated=_ru[1];
@@ -1797,12 +2237,14 @@ function App() {
       db.from('categories').select('*').order('name'),
       db.from('profiles').select('*').order('created_at'),
       db.from('currencies').select('*').order('code'),
+      db.from('manpower_entries').select('*').order('created_at'),
     ]).then(function(res){
       if(!res[0].error&&res[0].data)setProjects(res[0].data);
       if(!res[1].error&&res[1].data)setItems(res[1].data.map(toApp));
       if(!res[2].error&&res[2].data&&res[2].data.length)setCats(res[2].data.map(function(x){return x.name;}));
       if(!res[3].error&&res[3].data)setUsers(res[3].data);
       if(!res[4].error&&res[4].data&&res[4].data.length)setCurrencies(res[4].data);
+      if(!res[5].error&&res[5].data)setManpower(res[5].data.map(toAppM));
       setDataLoading(false);
     }).catch(function(e){console.error('Load error:',e);setDataLoading(false);});
   },[user]);
@@ -1810,7 +2252,7 @@ function App() {
   /* Logout */
   async function handleLogout(){
     if(db)await db.auth.signOut();
-    setProjects(DEMO_PROJECTS);setItems(DEMO_ITEMS);setCats(DEMO_CATS);setUsers(DEMO_USERS);
+    setProjects(DEMO_PROJECTS);setItems(DEMO_ITEMS);setCats(DEMO_CATS);setUsers(DEMO_USERS);setManpower(DEMO_MANPOWER);
   }
 
   /* Project CRUD */
@@ -1826,11 +2268,12 @@ function App() {
     } else {
       /* Strip fields Supabase won't allow in update/insert payload */
       var payload = {
-        name:        data.name,
-        description: data.description,
-        budget:      data.budget,
-        color:       data.color,
-        currency:    data.currency || 'USD',
+        name:             data.name,
+        description:      data.description,
+        budget:           data.budget,
+        color:            data.color,
+        currency:         data.currency || 'USD',
+        manpower_budget:  data.manpower_budget || 0,
       };
       if(data.id){
         var r = await db.from('projects').update(payload).eq('id',data.id).select().single();
@@ -1850,6 +2293,7 @@ function App() {
     if(!DEMO&&db)await db.from('projects').delete().eq('id',id);
     setProjects(function(p){return p.filter(function(j){return j.id!==id;});});
     setItems(function(i){return i.filter(function(x){return x.projectId!==id;});});
+    setManpower(function(m){return m.filter(function(x){return x.projectId!==id;});});
     if(pid===id)setPid(null);toast('Project deleted','info');
   }
 
@@ -1884,6 +2328,38 @@ function App() {
   }
   async function deleteItem(id){if(!DEMO&&db)await db.from('items').delete().eq('id',id);setItems(function(p){return p.filter(function(i){return i.id!==id;});});toast('Equipment removed','info');}
   async function moveItem(id,status){if(!DEMO&&db)await db.from('items').update({status:status}).eq('id',id);setItems(function(p){return p.map(function(i){return i.id===id?Object.assign({},i,{status:status}):i;});});toast('Moved to '+status);}
+
+  /* Manpower CRUD */
+  async function saveManpower(data) {
+    if(DEMO||!db){
+      if(data.id){
+        setManpower(function(p){return p.map(function(m){return m.id===data.id?Object.assign({},m,data):m;});});
+        toast('Manpower entry updated');
+      } else {
+        setManpower(function(p){return p.concat([Object.assign({},data,{id:uid()})]);});
+        toast('Manpower entry added');
+      }
+      return;
+    }
+    var row=toDBM(data);
+    if(data.id){
+      var r=await db.from('manpower_entries').update(row).eq('id',data.id).select().single();
+      if(r.error) throw new Error(r.error.message);
+      setManpower(function(p){return p.map(function(m){return m.id===data.id?toAppM(r.data):m;});});
+      toast('Manpower entry updated');
+    } else {
+      var d2=Object.assign({},row); delete d2.id;
+      var r2=await db.from('manpower_entries').insert(d2).select().single();
+      if(r2.error) throw new Error(r2.error.message);
+      setManpower(function(p){return p.concat([toAppM(r2.data)]);});
+      toast('Manpower entry added');
+    }
+  }
+  async function deleteManpower(id){
+    if(!DEMO&&db)await db.from('manpower_entries').delete().eq('id',id);
+    setManpower(function(p){return p.filter(function(m){return m.id!==id;});});
+    toast('Manpower entry removed','info');
+  }
 
   /* Category CRUD */
   async function addCat(name){if(!DEMO&&db)await db.from('categories').insert({name:name});setCats(function(p){return p.concat([name]);});}
@@ -2079,9 +2555,9 @@ function App() {
         {/* Page body */}
         <main className="main-scroll page-pad" style={{flex:1,overflowY:'auto',padding:'20px 24px',WebkitOverflowScrolling:'touch'}}>
           {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid var(--c-border)',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading…</div>}
-          {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency}/>}
-          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
-          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
+          {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency} manpower={manpower}/>}
+          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} manpower={manpower} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
+          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} manpower={manpower} onAddManpower={saveManpower} onEditManpower={saveManpower} onDeleteManpower={deleteManpower} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
           {tab==='team'&&<TeamView users={users} currentUser={user} onAdd={function(){setShowAddUser(true);}} onUpdate={updateUser} onDelete={deleteUser} onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
           {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} onToast={toast}/>}
         </main>
