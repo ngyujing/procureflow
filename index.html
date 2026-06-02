@@ -207,15 +207,21 @@ var CC = ['#F59E0B','#3B82F6','#10B981','#8B5CF6','#EF4444','#06B6D4'];
 var ROLES = ['Admin','Manager','Member','Viewer'];
 
 /* ── Manpower constants ─────────────────────────────────────── */
-var MANPOWER_RATES = {
-  'Project Manager':    520,
-  'Team Lead':          400,
-  'Project Engineer':   320,
-  'IT Engineer':        680,
-  'Operations Manager': 560,
-};
-var MANPOWER_TYPES = ['Project Manager','Team Lead','Project Engineer','IT Engineer','Operations Manager'];
 var MP_COLOR = '#A78BFA';
+/* Default types used in Demo mode and as initial state before DB loads */
+var DEMO_MANPOWER_TYPES = [
+  {id:'mt1', name:'Project Manager',    rate_per_day:520},
+  {id:'mt2', name:'Team Lead',          rate_per_day:400},
+  {id:'mt3', name:'Project Engineer',   rate_per_day:320},
+  {id:'mt4', name:'IT Engineer',        rate_per_day:680},
+  {id:'mt5', name:'Operations Manager', rate_per_day:560},
+];
+/* Build a {name: rate} lookup map from the manpowerTypes array */
+function mpRatesMap(manpowerTypes) {
+  var m = {};
+  (manpowerTypes||[]).forEach(function(t){ m[t.name] = t.rate_per_day||0; });
+  return m;
+}
 
 /* Normalize any date value to YYYY-MM-DD for <input type="date"> + calcDays.
    Supabase may return a full ISO timestamp which date inputs cannot display. */
@@ -229,14 +235,16 @@ function calcDays(s, e) {
   if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
   return Math.round((ed - sd) / 86400000) + 1;
 }
-function mpEstCostForProject(manpower, projectId) {
+function mpEstCostForProject(manpower, projectId, ratesMap) {
+  var rm = ratesMap || {};
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.est_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
+    return s + (m.est_hours||0)*(m.qty||1)*(m.fte||1)*(rm[m.manpower_type]||0);
   }, 0);
 }
-function mpActCostForProject(manpower, projectId) {
+function mpActCostForProject(manpower, projectId, ratesMap) {
+  var rm = ratesMap || {};
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.act_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
+    return s + (m.act_hours||0)*(m.qty||1)*(m.fte||1)*(rm[m.manpower_type]||0);
   }, 0);
 }
 function isCommitted(status) { return ['Order','Received','Delivered'].indexOf(status)>=0; }
@@ -266,14 +274,15 @@ function buildSCurveData(items) {
     return{label:d.toLocaleDateString('en-US',{month:'short'}),planned:cumP,actual:cumA};
   });
 }
-function buildEACData(projects,items,manpower) {
+function buildEACData(projects,items,manpower,manpowerTypes) {
+  var rm=mpRatesMap(manpowerTypes||DEMO_MANPOWER_TYPES);
   return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
     var procComm=procCommittedForProject(items,p.id);
     var procRemEst=pi.filter(function(i){return!isCommitted(i.status);}).reduce(function(s,i){return s+(i.cost||0);},0);
     var procEAC=procComm+procRemEst;
-    var mpEst=mpEstCostForProject(manpower,p.id);
-    var mpAct=mpActCostForProject(manpower,p.id);
+    var mpEst=mpEstCostForProject(manpower,p.id,rm);
+    var mpAct=mpActCostForProject(manpower,p.id,rm);
     var mpEAC=mpAct>0?mpAct:mpEst;
     var totalBudget=(p.budget||0)+(p.manpower_budget||0);
     var totalEAC=procEAC+mpEAC;
@@ -1424,6 +1433,8 @@ function ItemModal(props) {
 function ManpowerTab(props) {
   var project=props.project, manpower=props.manpower||[];
   var onSave=props.onSave, onDelete=props.onDelete;
+  var manpowerTypes=props.manpowerTypes||DEMO_MANPOWER_TYPES;
+  var rm=useMemo(function(){return mpRatesMap(manpowerTypes);},[manpowerTypes]);
 
   var _pn=useState(null),pendingNew=_pn[0],setPendingNew=_pn[1];
   var _er=useState(null),editingRow=_er[0],setEditingRow=_er[1];
@@ -1433,16 +1444,16 @@ function ManpowerTab(props) {
 
   var grandEstD=0,grandEstC=0,grandActD=0,grandActC=0;
   pm.forEach(function(m){
-    var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+    var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
     grandEstD+=(m.est_hours||0)*qty; grandActD+=(m.act_hours||0)*qty;
     grandEstC+=(m.est_hours||0)*qty*fte*rate; grandActC+=(m.act_hours||0)*qty*fte*rate;
   });
 
   /* est_hours column stores estimated days (auto from dates); act_hours stores actual days (manual) */
-  function blankForm(){return{description:'',manpower_type:MANPOWER_TYPES[0],qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
+  function blankForm(){return{description:'',manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
   function upd(form,k,v){return Object.assign({},form,{[k]:v});}
   function calc(form){
-    var rate=MANPOWER_RATES[form.manpower_type]||0;
+    var rate=rm[form.manpower_type]||0;
     var qty=Math.max(1,parseInt(form.qty)||1);
     var days=calcDays(form.start_date,form.end_date);        /* estimated days from start/end */
     var actDays=Math.max(0,parseFloat(form.act_days)||0);    /* actual days worked (manual) */
@@ -1482,7 +1493,7 @@ function ManpowerTab(props) {
               'Est. Cost (USD)','Act. Days','Act. Cost (USD)'];
     var rows=[cols];
     pm.forEach(function(m){
-      var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,days=m.est_hours||calcDays(m.start_date,m.end_date);
+      var rate=rm[m.manpower_type]||0,qty=m.qty||1,days=m.est_hours||calcDays(m.start_date,m.end_date);
       var fte=m.fte!=null?m.fte:1,actDays=m.act_hours||0;
       rows.push([m.description||'',m.manpower_type,rate,qty,dOnly(m.start_date),dOnly(m.end_date),days,fte,
                  rate*days*fte*qty, actDays, rate*actDays*fte*qty]);
@@ -1515,7 +1526,7 @@ function ManpowerTab(props) {
         </td>
         <td style={TDE}>
           <select value={form.manpower_type} onChange={function(e){setForm(upd(form,'manpower_type',e.target.value));}} style={Object.assign({},ISM,{minWidth:150})}>
-            {MANPOWER_TYPES.map(function(t){return <option key={t} value={t}>{t}</option>;})}
+            {manpowerTypes.map(function(t){return <option key={t.id||t.name} value={t.name}>{t.name}</option>;})}
           </select>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',color:MP_COLOR,fontWeight:700,whiteSpace:'nowrap'})}>
@@ -1621,7 +1632,7 @@ function ManpowerTab(props) {
               if(editingRow&&editingRow.id===m.id){
                 return <EditRow key={m.id} form={editingRow.form} setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}} onCommit={commitEdit} onCancel={function(){setEditingRow(null);}} isNew={false}/>;
               }
-              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+              var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
               var days=m.est_hours||calcDays(m.start_date,m.end_date);
               var actDays=m.act_hours||0;
               var estC=rate*days*fte*qty, actC=rate*actDays*fte*qty;
@@ -1696,6 +1707,7 @@ function ManpowerTab(props) {
 /* ── Dashboard ──────────────────────────────────────────────── */
 function Dashboard(props) {
   var projects=props.projects,items=props.items,currency=props.currency,manpower=props.manpower||[];
+  var rm=useMemo(function(){return mpRatesMap(props.manpowerTypes||DEMO_MANPOWER_TYPES);},[props.manpowerTypes]);
 
   /* ── Widget visibility (eye toggles) ─── */
   var _wv=useState(function(){try{return JSON.parse(localStorage.getItem('pf-dash-w')||'{}');}catch(e){return{};}});
@@ -1708,8 +1720,8 @@ function Dashboard(props) {
   var tBudget=tProcBudget+tMPBudget;
   var tProcEst=items.reduce(function(s,i){return s+(i.cost||0);},0);
   var tProcComm=items.reduce(function(s,i){return s+(isCommitted(i.status)?(i.act_cost!=null?i.act_cost:i.cost):0);},0);
-  var tMPAct=projects.reduce(function(s,p){return s+mpActCostForProject(manpower,p.id);},0);
-  var tMPEst=projects.reduce(function(s,p){return s+mpEstCostForProject(manpower,p.id);},0);
+  var tMPAct=projects.reduce(function(s,p){return s+mpActCostForProject(manpower,p.id,rm);},0);
+  var tMPEst=projects.reduce(function(s,p){return s+mpEstCostForProject(manpower,p.id,rm);},0);
   var tMPSpend=tMPAct>0?tMPAct:tMPEst;
   var tCommitted=tProcComm+tMPSpend;
   var deliv=items.filter(function(i){return i.status==='Delivered';}).length;
@@ -1719,7 +1731,7 @@ function Dashboard(props) {
   var stageRows=STAGES.map(function(s){return{name:s,count:items.filter(function(i){return i.status===s;}).length};});
 
   var sCurveData=useMemo(function(){return buildSCurveData(items);},[items]);
-  var eacData=useMemo(function(){return buildEACData(projects,items,manpower);},[projects,items,manpower]);
+  var eacData=useMemo(function(){return buildEACData(projects,items,manpower,props.manpowerTypes);},[projects,items,manpower,props.manpowerTypes]);
   var cfData=useMemo(function(){return buildCashFlowData(items);},[items]);
   var cfMaxV=useMemo(function(){return cfData.reduce(function(m,d){return Math.max(m,d.planned,d.committed);},1);},[cfData]);
 
@@ -1807,7 +1819,7 @@ function Dashboard(props) {
               <div style={{fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:10}}>By Project</div>
               {projects.map(function(p){
                 var procComm=procCommittedForProject(items,p.id);
-                var mpAct=mpActCostForProject(manpower,p.id),mpEst=mpEstCostForProject(manpower,p.id);
+                var mpAct=mpActCostForProject(manpower,p.id,rm),mpEst=mpEstCostForProject(manpower,p.id,rm);
                 var mpS=mpAct>0?mpAct:mpEst;
                 var totBudget=(p.budget||0)+(p.manpower_budget||0);
                 var totComm=procComm+mpS;
@@ -1968,6 +1980,7 @@ function Dashboard(props) {
 /* ── Projects List ──────────────────────────────────────────── */
 function ProjectsList(props) {
   var projects=props.projects,items=props.items,currency=props.currency,rates=props.rates,manpower=props.manpower||[],onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
+  var rm=useMemo(function(){return mpRatesMap(props.manpowerTypes||DEMO_MANPOWER_TYPES);},[props.manpowerTypes]);
   var stats=useMemo(function(){return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
     var projCur=p.currency||currency;
@@ -1976,8 +1989,8 @@ function ProjectsList(props) {
     var procEst=procEstForProject(items,p.id);
     var convertedComm=hasMixed&&rates?pi.filter(function(i){return isCommitted(i.status);}).reduce(function(s,i){var ic=i.item_currency||projCur,c=i.act_cost!=null?i.act_cost:i.cost;return s+((rates[ic]&&rates[projCur])?convert(c,ic,projCur,rates):c);},0):null;
     var procCommDisplay=convertedComm!=null?convertedComm:procComm;
-    var mpAct=mpActCostForProject(manpower,p.id);
-    var mpEst=mpEstCostForProject(manpower,p.id);
+    var mpAct=mpActCostForProject(manpower,p.id,rm);
+    var mpEst=mpEstCostForProject(manpower,p.id,rm);
     var mpSpend=mpAct>0?mpAct:mpEst;
     var totalCommitted=procCommDisplay+mpSpend;
     var totalBudget=(p.budget||0)+(p.manpower_budget||0);
@@ -1986,7 +1999,7 @@ function ProjectsList(props) {
     var pct=totalBudget?Math.min(110,Math.round((totalCommitted/totalBudget)*100)):0;
     var sc={};STAGES.forEach(function(s){sc[s]=pi.filter(function(i){return i.status===s;}).length;});
     return Object.assign({},p,{procComm:procCommDisplay,procEst:procEst,hasMixed:hasMixed,totalCommitted:totalCommitted,pct:pct,procPct:procPct,mpPct:mpPct,sc:sc,mpSpend:mpSpend,totalBudget:totalBudget,over:totalCommitted>totalBudget});
-  });},[projects,items,rates,currency,manpower]);
+  });},[projects,items,rates,currency,manpower,rm]);
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
       <div style={{fontSize:12,color:'var(--c-text5)'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
@@ -2050,6 +2063,8 @@ function Kanban(props) {
   var project=props.project,items=props.items,categories=props.categories,currency=props.currency,rates=props.rates;
   var onBack=props.onBack,onAdd=props.onAdd,onEdit=props.onEdit,onDelete=props.onDelete,onMove=props.onMove;
   var manpower=props.manpower||[],onAddManpower=props.onAddManpower,onDeleteManpower=props.onDeleteManpower;
+  var manpowerTypes=props.manpowerTypes||DEMO_MANPOWER_TYPES;
+  var rm=useMemo(function(){return mpRatesMap(manpowerTypes);},[manpowerTypes]);
   var _s=useState(''),search=_s[0],setSearch=_s[1];
   var _vt=useState('equipment'),viewTab=_vt[0],setViewTab=_vt[1];
   var pi=useMemo(function(){var q=search.toLowerCase();return items.filter(function(i){return i.projectId===project.id&&(!q||i.name.toLowerCase().includes(q)||i.vendor.toLowerCase().includes(q));});},[items,project.id,search]);
@@ -2057,8 +2072,8 @@ function Kanban(props) {
   var procEst=allPi.reduce(function(s,i){return s+(i.cost||0);},0);
   var procComm=procCommittedForProject(items,project.id);
   var hasMixedCur=allPi.some(function(i){return i.item_currency&&i.item_currency!==currency;});
-  var mpEstC=mpEstCostForProject(manpower,project.id);
-  var mpActC=mpActCostForProject(manpower,project.id);
+  var mpEstC=mpEstCostForProject(manpower,project.id,rm);
+  var mpActC=mpActCostForProject(manpower,project.id,rm);
   var mpSpend=mpActC>0?mpActC:mpEstC;
   var totalCommitted=procComm+mpSpend;
   var totalEst=procEst+mpEstC;
@@ -2241,9 +2256,108 @@ function Kanban(props) {
       {viewTab==='manpower'&&<ManpowerTab
         project={project}
         manpower={manpower}
+        manpowerTypes={manpowerTypes}
         onSave={onAddManpower}
         onDelete={onDeleteManpower}
       />}
+    </div>
+  );
+}
+
+/* ── Manpower Types Settings ─────────────────────────────────── */
+function ManpowerTypesSettings(props) {
+  var types=props.types||[], onAdd=props.onAdd, onUpdate=props.onUpdate, onDelete=props.onDelete, onToast=props.onToast;
+  var _nName=useState(''),nName=_nName[0],setNName=_nName[1];
+  var _nRate=useState(''),nRate=_nRate[0],setNRate=_nRate[1];
+  var _editId=useState(null),editId=_editId[0],setEditId=_editId[1];
+  var _editForm=useState({}),editForm=_editForm[0],setEditForm=_editForm[1];
+
+  var INP2={background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'6px 10px',color:'var(--c-text2)',fontSize:13,width:'100%'};
+  var TH={padding:'8px 12px',textAlign:'left',fontSize:10,color:'var(--c-text5)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',background:'var(--c-bg)'};
+
+  async function add(){
+    var n=nName.trim(), r=parseFloat(nRate);
+    if(!n){onToast('Name is required','warning');return;}
+    if(isNaN(r)||r<0){onToast('Rate must be a valid number','warning');return;}
+    if(types.find(function(t){return t.name.toLowerCase()===n.toLowerCase();})){onToast('Type already exists','warning');return;}
+    await onAdd({name:n,rate_per_day:r});
+    setNName('');setNRate('');
+    onToast('Manpower type "'+n+'" added');
+  }
+
+  async function saveEdit(t){
+    var n=(editForm.name!==undefined?editForm.name:t.name).trim();
+    var r=parseFloat(editForm.rate_per_day!==undefined?editForm.rate_per_day:t.rate_per_day);
+    if(!n){onToast('Name is required','warning');return;}
+    if(isNaN(r)||r<0){onToast('Rate must be a valid number','warning');return;}
+    await onUpdate(Object.assign({},t,{name:n,rate_per_day:r}));
+    setEditId(null);setEditForm({});
+    onToast('Manpower type updated');
+  }
+
+  return (
+    <div>
+      <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+        <Ico n="users" size={14} color={MP_COLOR}/> Manpower Types
+      </div>
+      <p style={{fontSize:12,color:'var(--c-text5)',marginBottom:14}}>Define the roles and their daily rates used in the Manpower plan.</p>
+      <div style={{border:'1px solid var(--c-border)',borderRadius:9,overflow:'hidden',marginBottom:16}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead>
+            <tr>
+              {['Role / Type','Rate / Day (USD)','Actions'].map(function(h){return <th key={h} style={TH}>{h}</th>;})}
+            </tr>
+          </thead>
+          <tbody>
+            {types.map(function(t,idx){
+              var isEdit=editId===t.id;
+              return (
+                <tr key={t.id} style={{borderTop:idx>0?'1px solid var(--c-border)':'none'}}>
+                  <td style={{padding:'9px 12px'}}>
+                    {isEdit
+                      ? <input style={Object.assign({},INP2,{width:180})} value={editForm.name!==undefined?editForm.name:t.name} onChange={function(e){setEditForm(function(f){return Object.assign({},f,{name:e.target.value});});}}/>
+                      : <span style={{fontSize:13,fontWeight:600,color:'var(--c-text2)'}}>{t.name}</span>}
+                  </td>
+                  <td style={{padding:'9px 12px'}}>
+                    {isEdit
+                      ? <input type="number" min="0" step="1" style={Object.assign({},INP2,{width:110})} value={editForm.rate_per_day!==undefined?editForm.rate_per_day:t.rate_per_day} onChange={function(e){setEditForm(function(f){return Object.assign({},f,{rate_per_day:e.target.value});});}}/>
+                      : <span style={{fontSize:13,color:MP_COLOR,fontWeight:700}}>${(t.rate_per_day||0).toLocaleString()}/day</span>}
+                  </td>
+                  <td style={{padding:'9px 12px'}}>
+                    <div style={{display:'flex',gap:6}}>
+                      {isEdit
+                        ? <>
+                            <button onClick={function(){saveEdit(t);}} style={{background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.25)',borderRadius:6,padding:'4px 11px',color:'#34D399',fontSize:12,cursor:'pointer'}}>Save</button>
+                            <button onClick={function(){setEditId(null);setEditForm({});}} style={{background:'none',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 11px',color:'var(--c-text5)',fontSize:12,cursor:'pointer'}}>Cancel</button>
+                          </>
+                        : <>
+                            <button onClick={function(){setEditId(t.id);setEditForm({});}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:6,padding:'4px 9px',color:'#60A5FA',fontSize:12,cursor:'pointer'}}>Edit</button>
+                            <button onClick={function(){if(window.confirm('Remove "'+t.name+'"?'))onDelete(t.id);}} style={{background:'rgba(248,113,113,.08)',border:'1px solid rgba(248,113,113,.18)',borderRadius:6,padding:'4px 9px',color:'#F87171',fontSize:12,cursor:'pointer'}}>Delete</button>
+                          </>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {/* Add new type row */}
+      <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
+        <div style={{flex:2}}>
+          <div style={{fontSize:11,color:'var(--c-text5)',marginBottom:4}}>Role Name</div>
+          <input style={INP2} placeholder="e.g. Site Supervisor" value={nName} onChange={function(e){setNName(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter')add();}}/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:11,color:'var(--c-text5)',marginBottom:4}}>Rate/Day (USD)</div>
+          <input type="number" min="0" step="1" style={INP2} placeholder="e.g. 450" value={nRate} onChange={function(e){setNRate(e.target.value);}}
+            onKeyDown={function(e){if(e.key==='Enter')add();}}/>
+        </div>
+        <button onClick={add} style={{padding:'8px 16px',background:'rgba(167,139,250,.12)',border:'1px solid rgba(167,139,250,.25)',borderRadius:8,color:MP_COLOR,fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer',whiteSpace:'nowrap'}}>
+          <Ico n="plus" size={13}/> Add Type
+        </button>
+      </div>
     </div>
   );
 }
@@ -2254,6 +2368,7 @@ function SettingsView(props) {
   var currencies=props.currencies, onAddCurrency=props.onAddCurrency, onUpdateCurrency=props.onUpdateCurrency, onDeleteCurrency=props.onDeleteCurrency;
   var categories=props.categories, onAddCat=props.onAddCat, onRemoveCat=props.onRemoveCat;
   var rates=props.rates, ratesUpdated=props.ratesUpdated, onRefreshRates=props.onRefreshRates;
+  var manpowerTypes=props.manpowerTypes||[], onAddMpType=props.onAddMpType, onUpdateMpType=props.onUpdateMpType, onDeleteMpType=props.onDeleteMpType;
   var onToast=props.onToast;
 
   var _nc=useState(''),newCat=_nc[0],setNewCat=_nc[1];
@@ -2420,7 +2535,7 @@ function SettingsView(props) {
       </div>
 
       {/* ── Equipment Categories ── */}
-      <div style={Object.assign({},card,{marginBottom:0})}>
+      <div style={card}>
         <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',marginBottom:6,display:'flex',alignItems:'center',gap:8}}><Ico n="tag" size={14} color="#34D399"/> Equipment Categories</div>
         <p style={{fontSize:12,color:'var(--c-text5)',margin:'0 0 14px'}}>Manage categories available when adding equipment.</p>
         <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:14}}>
@@ -2433,6 +2548,11 @@ function SettingsView(props) {
           <input style={Object.assign({},INP,{flex:1})} value={newCat} placeholder="New category…" onChange={function(e){setNewCat(e.target.value);}} onKeyDown={function(e){if(e.key==='Enter')addCat();}}/>
           <button onClick={addCat} style={{padding:'9px 16px',background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.25)',borderRadius:8,color:'#34D399',fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}><Ico n="plusc" size={14}/> Add</button>
         </div>
+      </div>
+
+      {/* ── Manpower Types ── */}
+      <div style={Object.assign({},card,{marginBottom:0})}>
+        <ManpowerTypesSettings types={manpowerTypes} onAdd={onAddMpType} onUpdate={onUpdateMpType} onDelete={onDeleteMpType} onToast={onToast}/>
       </div>
     </div>
   );
@@ -2451,6 +2571,7 @@ function App() {
   var _cr=useState(DEMO_CURRENCIES),currencies=_cr[0],setCurrencies=_cr[1];
   var _us=useState(DEMO_USERS),users=_us[0],setUsers=_us[1];
   var _mp=useState(DEMO_MANPOWER),manpower=_mp[0],setManpower=_mp[1];
+  var _mpt=useState(DEMO_MANPOWER_TYPES),manpowerTypes=_mpt[0],setManpowerTypes=_mpt[1];
   var _dl=useState(false),dataLoading=_dl[0],setDataLoading=_dl[1];
   var _rt=useState(null),rates=_rt[0],setRates=_rt[1];
   var _ru=useState(''),ratesUpdated=_ru[0],setRatesUpdated=_ru[1];
@@ -2519,6 +2640,7 @@ function App() {
       db.from('profiles').select('*').order('created_at'),
       db.from('currencies').select('*').order('code'),
       db.from('manpower_entries').select('*').order('created_at'),
+      db.from('manpower_types').select('*').order('name'),
     ]).then(function(res){
       if(!res[0].error&&res[0].data)setProjects(res[0].data);
       if(!res[1].error&&res[1].data)setItems(res[1].data.map(toApp));
@@ -2526,6 +2648,7 @@ function App() {
       if(!res[3].error&&res[3].data)setUsers(res[3].data);
       if(!res[4].error&&res[4].data&&res[4].data.length)setCurrencies(res[4].data);
       if(!res[5].error&&res[5].data)setManpower(res[5].data.map(toAppM));
+      if(!res[6].error&&res[6].data&&res[6].data.length)setManpowerTypes(res[6].data);
       setDataLoading(false);
     }).catch(function(e){console.error('Load error:',e);setDataLoading(false);});
   },[user]);
@@ -2533,7 +2656,7 @@ function App() {
   /* Logout */
   async function handleLogout(){
     if(db)await db.auth.signOut();
-    setProjects(DEMO_PROJECTS);setItems(DEMO_ITEMS);setCats(DEMO_CATS);setUsers(DEMO_USERS);setManpower(DEMO_MANPOWER);
+    setProjects(DEMO_PROJECTS);setItems(DEMO_ITEMS);setCats(DEMO_CATS);setUsers(DEMO_USERS);setManpower(DEMO_MANPOWER);setManpowerTypes(DEMO_MANPOWER_TYPES);
   }
 
   /* Project CRUD */
@@ -2651,6 +2774,30 @@ function App() {
     }
     setManpower(function(p){return p.filter(function(m){return m.id!==id;});});
     toast('Manpower entry removed','info');
+  }
+
+  /* Manpower Type CRUD */
+  async function addManpowerType(data){
+    if(DEMO||!db){
+      setManpowerTypes(function(p){return p.concat([Object.assign({},data,{id:uid(),created_at:new Date().toISOString()})]);});
+      return;
+    }
+    var r=await db.from('manpower_types').insert({name:data.name,rate_per_day:data.rate_per_day}).select().single();
+    if(r.error){toast('Failed: '+r.error.message,'error');return;}
+    setManpowerTypes(function(p){return p.concat([r.data]);});
+  }
+  async function updateManpowerType(data){
+    if(DEMO||!db){
+      setManpowerTypes(function(p){return p.map(function(t){return t.id===data.id?Object.assign({},t,data):t;});});
+      return;
+    }
+    await db.from('manpower_types').update({name:data.name,rate_per_day:data.rate_per_day}).eq('id',data.id);
+    setManpowerTypes(function(p){return p.map(function(t){return t.id===data.id?Object.assign({},t,data):t;});});
+  }
+  async function deleteManpowerType(id){
+    if(!DEMO&&db)await db.from('manpower_types').delete().eq('id',id);
+    setManpowerTypes(function(p){return p.filter(function(t){return t.id!==id;});});
+    toast('Manpower type removed','info');
   }
 
   /* Category CRUD */
@@ -2847,11 +2994,11 @@ function App() {
         {/* Page body */}
         <main className="main-scroll page-pad" style={{flex:1,overflowY:'auto',padding:'20px 24px',WebkitOverflowScrolling:'touch'}}>
           {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid var(--c-border)',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading…</div>}
-          {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency} manpower={manpower}/>}
-          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} manpower={manpower} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
-          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} manpower={manpower} onAddManpower={saveManpower} onEditManpower={saveManpower} onDeleteManpower={deleteManpower} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
+          {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency} manpower={manpower} manpowerTypes={manpowerTypes}/>}
+          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} manpower={manpower} manpowerTypes={manpowerTypes} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
+          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} manpower={manpower} manpowerTypes={manpowerTypes} onAddManpower={saveManpower} onEditManpower={saveManpower} onDeleteManpower={deleteManpower} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
           {tab==='team'&&<TeamView users={users} currentUser={user} onAdd={function(){setShowAddUser(true);}} onUpdate={updateUser} onDelete={deleteUser} onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
-          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} onToast={toast}/>}
+          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} manpowerTypes={manpowerTypes} onAddMpType={addManpowerType} onUpdateMpType={updateManpowerType} onDeleteMpType={deleteManpowerType} onToast={toast}/>}
         </main>
       </div>
 
