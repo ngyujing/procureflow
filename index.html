@@ -225,12 +225,12 @@ function calcDays(s, e) {
 }
 function mpEstCostForProject(manpower, projectId) {
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.est_hours||0)*(m.qty||1)*(MANPOWER_RATES[m.manpower_type]||0);
+    return s + (m.est_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
 }
 function mpActCostForProject(manpower, projectId) {
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.act_hours||0)*(m.qty||1)*(MANPOWER_RATES[m.manpower_type]||0);
+    return s + (m.act_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
 }
 
@@ -1317,7 +1317,8 @@ function ManpowerTab(props) {
   pm.forEach(function(m){
     var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1;
     grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
-    grandEstC+=(m.est_hours||0)*qty*rate; grandActC+=(m.act_hours||0)*qty*rate;
+    var fte=m.fte||1;
+    grandEstC+=(m.est_hours||0)*qty*fte*rate; grandActC+=(m.act_hours||0)*qty*fte*rate;
   });
 
   function blankForm(){return{description:'',manpower_type:MANPOWER_TYPES[0],qty:'1',start_date:'',end_date:'',fte:'1',est_hours:'',act_hours:'0'};}
@@ -1328,7 +1329,7 @@ function ManpowerTab(props) {
     var estH=parseFloat(form.est_hours)||0;
     var actH=parseFloat(form.act_hours)||0;
     var days=calcDays(form.start_date,form.end_date);
-    return{rate:rate,qty:qty,estH:estH,actH:actH,days:days,estC:estH*qty*rate,actC:actH*qty*rate};
+    return{rate:rate,qty:qty,estH:estH,actH:actH,days:days,fte:fte,estC:estH*qty*fte*rate,actC:actH*qty*fte*rate};
   }
 
   async function commitNew(){
@@ -1362,8 +1363,9 @@ function ManpowerTab(props) {
     var rows=[cols];
     pm.forEach(function(m){
       var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,days=calcDays(m.start_date,m.end_date);
-      rows.push([m.description||'',m.manpower_type,rate,qty,m.start_date||'',m.end_date||'',days,m.fte||1,
-                 (m.est_hours||0)*qty,(m.est_hours||0)*qty*rate,(m.act_hours||0)*qty,(m.act_hours||0)*qty*rate]);
+      var fte=m.fte||1;
+      rows.push([m.description||'',m.manpower_type,rate,qty,m.start_date||'',m.end_date||'',days,fte,
+                 (m.est_hours||0)*qty,(m.est_hours||0)*qty*fte*rate,(m.act_hours||0)*qty,(m.act_hours||0)*qty*fte*rate]);
     });
     rows.push([]);
     rows.push(['GRAND TOTAL','','','','','','','',grandEstH,grandEstC,grandActH,grandActC]);
@@ -1476,9 +1478,9 @@ function ManpowerTab(props) {
               if(editingRow&&editingRow.id===m.id){
                 return <EditRow key={m.id} form={editingRow.form} setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}} onCommit={commitEdit} onCancel={function(){setEditingRow(null);}} isNew={false}/>;
               }
-              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1;
+              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte||1;
               var days=calcDays(m.start_date,m.end_date);
-              var estC=(m.est_hours||0)*qty*rate, actC=(m.act_hours||0)*qty*rate;
+              var estC=(m.est_hours||0)*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
               return (
                 <tr key={m.id}
                   onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
@@ -1570,10 +1572,11 @@ function ManpowerModal(props) {
   var days=calcDays(form.start_date,form.end_date);
   var rate=MANPOWER_RATES[form.manpower_type]||0;
   var qty=Math.max(1,parseInt(form.qty)||1);
+  var fte=parseFloat(form.fte)||1;
   var estH=parseFloat(form.est_hours)||0;
   var actH=parseFloat(form.act_hours)||0;
-  var estCost=estH*qty*rate;
-  var actCost=actH*qty*rate;
+  var estCost=estH*qty*fte*rate;
+  var actCost=actH*qty*fte*rate;
 
   async function submit(){
     if(!form.description.trim()) return setError('Description of work is required.');
@@ -1683,7 +1686,8 @@ function ManpowerSection(props) {
   pm.forEach(function(m){
     var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1;
     grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
-    grandEstC+=(m.est_hours||0)*qty*rate; grandActC+=(m.act_hours||0)*qty*rate;
+    var fte2=m.fte||1;
+    grandEstC+=(m.est_hours||0)*qty*fte2*rate; grandActC+=(m.act_hours||0)*qty*fte2*rate;
   });
 
   var budgeted = project.manpower_budget||0;
@@ -1695,13 +1699,13 @@ function ManpowerSection(props) {
               'Est. Hours (Total)','Est. Cost (USD)','Act. Hours (Total)','Act. Cost (USD)'];
     var rows=[cols];
     pm.forEach(function(m){
-      var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1;
+      var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1, fte=m.fte||1;
       var days=calcDays(m.start_date,m.end_date);
       rows.push([
         m.description||'', m.manpower_type, qty,
-        m.start_date||'', m.end_date||'', days, m.fte||1,
-        (m.est_hours||0)*qty, (m.est_hours||0)*qty*rate,
-        (m.act_hours||0)*qty, (m.act_hours||0)*qty*rate,
+        m.start_date||'', m.end_date||'', days, fte,
+        (m.est_hours||0)*qty, (m.est_hours||0)*qty*fte*rate,
+        (m.act_hours||0)*qty, (m.act_hours||0)*qty*fte*rate,
       ]);
     });
     rows.push([]);
@@ -1711,7 +1715,7 @@ function ManpowerSection(props) {
       var entries=pm.filter(function(m){return m.manpower_type===t;});
       if(!entries.length)return;
       var rate=MANPOWER_RATES[t]||0, tEH=0,tAH=0,tEC=0,tAC=0;
-      entries.forEach(function(m){var qty=m.qty||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*rate;tAC+=(m.act_hours||0)*qty*rate;});
+      entries.forEach(function(m){var qty=m.qty||1,fte=m.fte||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*fte*rate;tAC+=(m.act_hours||0)*qty*fte*rate;});
       rows.push([t,'',entries.reduce(function(s,m){return s+(m.qty||1);},0),'','','','',tEH,tEC,tAH,tAC]);
     });
     rows.push([]);
@@ -1797,12 +1801,12 @@ function ManpowerSection(props) {
                   if(!entries.length) return null;
                   var rate=MANPOWER_RATES[type]||0;
                   var tEH=0,tAH=0,tEC=0,tAC=0;
-                  entries.forEach(function(m){var qty=m.qty||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*rate;tAC+=(m.act_hours||0)*qty*rate;});
+                  entries.forEach(function(m){var qty=m.qty||1,fte=m.fte||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*fte*rate;tAC+=(m.act_hours||0)*qty*fte*rate;});
                   return [
                     entries.map(function(m,idx){
                       var days=calcDays(m.start_date,m.end_date);
-                      var qty=m.qty||1;
-                      var ec=(m.est_hours||0)*qty*rate, ac=(m.act_hours||0)*qty*rate;
+                      var qty=m.qty||1,fte=m.fte||1;
+                      var ec=(m.est_hours||0)*qty*fte*rate, ac=(m.act_hours||0)*qty*fte*rate;
                       return (
                         <tr key={m.id} style={{background:idx%2===0?'transparent':'rgba(255,255,255,.015)'}}>
                           <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
