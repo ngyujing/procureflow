@@ -233,6 +233,58 @@ function mpActCostForProject(manpower, projectId) {
     return s + (m.act_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
 }
+function isCommitted(status) { return ['Order','Received','Delivered'].indexOf(status)>=0; }
+function procEstForProject(items, projectId) {
+  return items.filter(function(i){return i.projectId===projectId;}).reduce(function(s,i){return s+(i.cost||0);},0);
+}
+function procCommittedForProject(items, projectId) {
+  return items.filter(function(i){return i.projectId===projectId&&isCommitted(i.status);})
+    .reduce(function(s,i){return s+(i.act_cost!=null?i.act_cost:i.cost);},0);
+}
+function buildSCurveData(items) {
+  var allDates=items.map(function(i){return i.delivery_date||i.order_by_date;}).filter(Boolean);
+  if(!allDates.length)return[];
+  var minM=allDates.reduce(function(a,b){return a<b?a:b;}).slice(0,7);
+  var maxM=allDates.reduce(function(a,b){return a>b?a:b;}).slice(0,7);
+  var months=[],cur=new Date(minM+'-01'),end=new Date(maxM+'-01');
+  while(cur<=end){months.push(cur.toISOString().slice(0,7));cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);}
+  var planByM={},actByM={};
+  items.forEach(function(i){if(i.delivery_date){var m=i.delivery_date.slice(0,7);planByM[m]=(planByM[m]||0)+(i.cost||0);}});
+  items.filter(function(i){return isCommitted(i.status)&&i.order_by_date;}).forEach(function(i){
+    var m=i.order_by_date.slice(0,7),c=i.act_cost!=null?i.act_cost:i.cost;actByM[m]=(actByM[m]||0)+c;
+  });
+  var cumP=0,cumA=0;
+  return months.map(function(m){
+    cumP+=(planByM[m]||0);cumA+=(actByM[m]||0);
+    var d=new Date(m+'-01');
+    return{label:d.toLocaleDateString('en-US',{month:'short'}),planned:cumP,actual:cumA};
+  });
+}
+function buildEACData(projects,items,manpower) {
+  return projects.map(function(p){
+    var pi=items.filter(function(i){return i.projectId===p.id;});
+    var procComm=procCommittedForProject(items,p.id);
+    var procRemEst=pi.filter(function(i){return!isCommitted(i.status);}).reduce(function(s,i){return s+(i.cost||0);},0);
+    var procEAC=procComm+procRemEst;
+    var mpEst=mpEstCostForProject(manpower,p.id);
+    var mpAct=mpActCostForProject(manpower,p.id);
+    var mpEAC=mpAct>0?mpAct:mpEst;
+    var totalBudget=(p.budget||0)+(p.manpower_budget||0);
+    var totalEAC=procEAC+mpEAC;
+    return{id:p.id,name:p.name,color:p.color,procBudget:p.budget||0,procComm:procComm,mpBudget:p.manpower_budget||0,mpEAC:mpEAC,totalBudget:totalBudget,totalEAC:totalEAC,variance:totalBudget-totalEAC,overrun:totalEAC>totalBudget};
+  });
+}
+function buildCashFlowData(items) {
+  var byM={};
+  items.forEach(function(i){
+    if(!i.delivery_date)return;
+    var m=i.delivery_date.slice(0,7);
+    if(!byM[m])byM[m]={month:m,planned:0,committed:0};
+    byM[m].planned+=(i.cost||0);
+    if(isCommitted(i.status))byM[m].committed+=(i.act_cost!=null?i.act_cost:i.cost);
+  });
+  return Object.keys(byM).sort().map(function(m){return byM[m];});
+}
 
 /* ── Demo data ──────────────────────────────────────────────── */
 var DEMO_PROJECTS = [
@@ -256,16 +308,16 @@ var DEMO_CURRENCIES = [
 ];
 
 var DEMO_ITEMS = [
-  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'USD',notes:'Confirm model XPS 9530 with 32GB RAM. Contact: sales@dell.com'},
-  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27',item_currency:'USD',notes:'Annual subscription. Renew before May 30.'},
-  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24',item_currency:'USD',notes:'Reserved instances. Region: ap-southeast-1.'},
-  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16',item_currency:'USD',notes:''},
-  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01',item_currency:'SGD',notes:'Includes 10 desks, 4 conference tables.'},
-  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'SGD',notes:''},
-  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18',item_currency:'SGD',notes:'Model: Leap V2. Colour: Black.'},
-  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20',item_currency:'USD',notes:'42U racks. Require raised floor installation.'},
-  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07',item_currency:'USD',notes:''},
-  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16',item_currency:'USD',notes:''},
+  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,act_cost:27200, delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'USD',notes:'Confirm model XPS 9530 with 32GB RAM. Contact: sales@dell.com'},
+  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, act_cost:5400,  delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27',item_currency:'USD',notes:'Annual subscription. Renew before May 30.'},
+  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,act_cost:11640, delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24',item_currency:'USD',notes:'Reserved instances. Region: ap-southeast-1.'},
+  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,act_cost:null,  delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16',item_currency:'USD',notes:''},
+  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, act_cost:8200,  delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01',item_currency:'SGD',notes:'Includes 10 desks, 4 conference tables.'},
+  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,act_cost:null,  delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'SGD',notes:''},
+  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, act_cost:10200, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18',item_currency:'SGD',notes:'Model: Leap V2. Colour: Black.'},
+  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,act_cost:43500, delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20',item_currency:'USD',notes:'42U racks. Require raised floor installation.'},
+  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,act_cost:null,  delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07',item_currency:'USD',notes:''},
+  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,act_cost:null,  delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16',item_currency:'USD',notes:''},
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_MANPOWER = [
@@ -381,6 +433,9 @@ var SVGP = {
   note:      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   download:  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   people:    '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  calendar:  '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  chartline: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  coins:     '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><line x1="16.71" y1="13.88" x2="17" y2="14"/>',
 };
 
 function Ico(props) {
@@ -414,6 +469,46 @@ function BarChart(props) {
     return <g key={'b'+i}><rect x={x} y={y} width={bW} height={bH} fill={d.color} rx="3" opacity="0.85"/><text x={x+bW/2} y={VH-PB+14} textAnchor="middle" fill="var(--c-text5)" fontSize="9.5">{lbl}</text></g>;
   });
   return <svg viewBox={'0 0 '+VW+' '+VH} style={{width:'100%',height:h}}>{gridEls}{barEls}</svg>;
+}
+
+/* ── Line chart (S-Curve) ───────────────────────────────────── */
+function LineChart(props) {
+  var data=props.data||[],height=props.height||180,currency=props.currency;
+  if(!data.length)return <div style={{height:height,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-text5)',fontSize:12}}>No data</div>;
+  var W=600,H=height,PL=60,PR=20,PT=10,PB=30,cW=W-PL-PR,cH=H-PT-PB;
+  var maxV=data.reduce(function(m,d){return Math.max(m,d.planned||0,d.actual||0);},1);
+  function xp(i){return PL+(i/Math.max(1,data.length-1))*cW;}
+  function yp(v){return PT+cH-(v/maxV)*cH;}
+  var grid=[0,0.25,0.5,0.75,1];
+  var plannedPts=data.map(function(d,i){return xp(i)+','+yp(d.planned||0);}).join(' ');
+  var actualPts=data.map(function(d,i){return xp(i)+','+yp(d.actual||0);}).join(' ');
+  var areaActual=actualPts+' '+xp(data.length-1)+','+(PT+cH)+' '+xp(0)+','+(PT+cH);
+  return (
+    <div>
+      <svg width="100%" viewBox={'0 0 '+W+' '+H} style={{display:'block'}}>
+        {grid.map(function(f){
+          var yv=PT+cH*(1-f),val=maxV*f;
+          return <g key={f}>
+            <line x1={PL} y1={yv} x2={W-PR} y2={yv} stroke="rgba(255,255,255,.04)" strokeWidth="1"/>
+            <text x={PL-5} y={yv+3.5} textAnchor="end" fill="rgba(148,163,184,.5)" fontSize="9">{val>=1000?'$'+(val/1000).toFixed(0)+'k':'$'+val.toFixed(0)}</text>
+          </g>;
+        })}
+        {data.map(function(d,i){return <text key={i} x={xp(i)} y={H-2} textAnchor="middle" fill="rgba(148,163,184,.5)" fontSize="9">{d.label}</text>;})}
+        <polygon points={areaActual} fill="rgba(52,211,153,.06)"/>
+        <polyline points={plannedPts} fill="none" stroke="#60A5FA" strokeWidth="2" strokeDasharray="5 3"/>
+        <polyline points={actualPts} fill="none" stroke="#34D399" strokeWidth="2"/>
+        {data.map(function(d,i){return <g key={i}><circle cx={xp(i)} cy={yp(d.planned||0)} r="3" fill="#60A5FA"/>{d.actual>0&&<circle cx={xp(i)} cy={yp(d.actual||0)} r="3" fill="#34D399"/>}</g>;})}
+      </svg>
+      <div style={{display:'flex',gap:18,justifyContent:'center',marginTop:6}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
+          <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#60A5FA" strokeWidth="2" strokeDasharray="5 3"/></svg> Planned
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
+          <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#34D399" strokeWidth="2"/></svg> Committed
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ── Pipeline dots ──────────────────────────────────────────── */
@@ -1118,6 +1213,7 @@ function ItemModal(props) {
     lead_time_days:initLead==='' ? '' : String(initLead),
     order_by_date: item ? (item.order_by_date||calcOrderBy(initDelivery,initLead)) : '',
     total_cost:    +initQty * (+initUnitCost||0),
+    act_cost:      item && item.act_cost!=null ? String(item.act_cost) : '',
     notes:         item ? (item.notes||'') : '',
   };
 
@@ -1166,6 +1262,7 @@ function ItemModal(props) {
         qty:            q,
         unit_cost:      uc,
         cost:           q * uc,
+        act_cost:       form.act_cost!==''&&!isNaN(+form.act_cost)?+form.act_cost:null,
         delivery_date:  form.delivery_date || null,
         lead_time_days: form.lead_time_days ? +form.lead_time_days : null,
         order_by_date:  ob || null,
@@ -1251,6 +1348,21 @@ function ItemModal(props) {
               <span style={{fontSize:16,fontWeight:700,color:'#F59E0B'}}>{fmt(convertedPreview,currency)}</span>
             </div>
           )}
+        </div>
+
+        {/* Actual / PO Cost */}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Actual / PO Amount ({CUR}) <span style={{fontSize:10,color:'var(--c-ghost)',fontWeight:400}}>— enter the real committed amount when placing order</span></label>
+          <div style={{display:'flex',gap:10,alignItems:'center'}}>
+            <input style={Object.assign({},INP,{flex:1})} type="number" min="0" step="0.01" value={form.act_cost}
+              onChange={function(e){set('act_cost',e.target.value);}} placeholder={'Defaults to est. cost ('+fmt(totalCost,CUR)+') if blank'}/>
+            {form.act_cost!==''&&!isNaN(+form.act_cost)&&(
+              <div style={{fontSize:12,color:+form.act_cost>totalCost?'#F87171':+form.act_cost<totalCost?'#34D399':'var(--c-text5)',whiteSpace:'nowrap'}}>
+                {+form.act_cost>totalCost?'▲':'▼'} {fmt(Math.abs(+form.act_cost-totalCost),CUR)} {+form.act_cost>totalCost?'over':'under'} est.
+              </div>
+            )}
+          </div>
+          <div style={{marginTop:5,fontSize:10.5,color:'var(--c-text5)'}}>Counts as committed spend once status reaches <strong>Order</strong></div>
         </div>
 
         {/* Delivery + Lead time */}
@@ -1887,26 +1999,57 @@ function ManpowerSection(props) {
 /* ── Dashboard ──────────────────────────────────────────────── */
 function Dashboard(props) {
   var projects=props.projects,items=props.items,currency=props.currency,manpower=props.manpower||[];
-  var tBudget=projects.reduce(function(s,p){return s+(p.budget||0)+(p.manpower_budget||0);},0);
-  var tProcureSpend=items.reduce(function(s,i){return s+i.cost;},0);
-  var tManpowerSpend=projects.reduce(function(s,p){
-    var ac=mpActCostForProject(manpower,p.id);
-    return s+(ac>0?ac:mpEstCostForProject(manpower,p.id));
-  },0);
-  var tSpend=tProcureSpend+tManpowerSpend;
+
+  /* ── Widget visibility (eye toggles) ─── */
+  var _wv=useState(function(){try{return JSON.parse(localStorage.getItem('pf-dash-w')||'{}');}catch(e){return{};}});
+  var wVis=_wv[0],setWVis=_wv[1];
+  function toggleW(id){setWVis(function(v){var n=Object.assign({},v,{[id]:!v[id]});try{localStorage.setItem('pf-dash-w',JSON.stringify(n));}catch(e){}return n;});}
+
+  /* ── Global metrics ─── */
+  var tProcBudget=projects.reduce(function(s,p){return s+(p.budget||0);},0);
+  var tMPBudget=projects.reduce(function(s,p){return s+(p.manpower_budget||0);},0);
+  var tBudget=tProcBudget+tMPBudget;
+  var tProcEst=items.reduce(function(s,i){return s+(i.cost||0);},0);
+  var tProcComm=items.reduce(function(s,i){return s+(isCommitted(i.status)?(i.act_cost!=null?i.act_cost:i.cost):0);},0);
+  var tMPAct=projects.reduce(function(s,p){return s+mpActCostForProject(manpower,p.id);},0);
+  var tMPEst=projects.reduce(function(s,p){return s+mpEstCostForProject(manpower,p.id);},0);
+  var tMPSpend=tMPAct>0?tMPAct:tMPEst;
+  var tCommitted=tProcComm+tMPSpend;
   var deliv=items.filter(function(i){return i.status==='Delivered';}).length;
-  var pct=tBudget?Math.min(100,Math.round((tSpend/tBudget)*100)):0;
-  var barCol=pct>85?'#EF4444':pct>65?'#F59E0B':'#34D399';
-  var chartData=useMemo(function(){return projects.map(function(p){return{name:p.name.split(' ').slice(0,2).join(' '),spend:items.filter(function(i){return i.projectId===p.id;}).reduce(function(s,i){return s+i.cost;},0),color:p.color};});},[ projects,items]);
+  var committedCt=items.filter(function(i){return isCommitted(i.status);}).length;
+  var pct=tBudget?Math.min(100,Math.round((tCommitted/tBudget)*100)):0;
+  var barCol=pct>100?'#EF4444':pct>85?'#F59E0B':'#34D399';
   var stageRows=STAGES.map(function(s){return{name:s,count:items.filter(function(i){return i.status===s;}).length};});
+
+  var sCurveData=useMemo(function(){return buildSCurveData(items);},[items]);
+  var eacData=useMemo(function(){return buildEACData(projects,items,manpower);},[projects,items,manpower]);
+  var cfData=useMemo(function(){return buildCashFlowData(items);},[items]);
+  var cfMaxV=useMemo(function(){return cfData.reduce(function(m,d){return Math.max(m,d.planned,d.committed);},1);},[cfData]);
+
   var cards=[
-    {icon:'dollar', label:'Total Budget', value:fmt(tBudget,currency), sub:projects.length+' projects',    color:'#F59E0B'},
-    {icon:'trend',  label:'Total Spend',  value:fmt(tSpend,currency),  sub:pct+'% utilized',              color:'#3B82F6'},
-    {icon:'package',label:'Total Items',  value:items.length,           sub:deliv+' delivered',             color:'#A78BFA'},
-    {icon:'check',  label:'Completion',   value:(items.length?Math.round((deliv/items.length)*100):0)+'%', sub:deliv+' of '+items.length+' items', color:'#34D399'},
+    {icon:'dollar',  label:'Total Budget',     value:fmt(tBudget,currency),    sub:projects.length+' projects · '+fmt(tProcBudget,currency)+' proc + '+fmt(tMPBudget,currency)+' MP', color:'#F59E0B'},
+    {icon:'coins',   label:'Committed Spend',  value:fmt(tCommitted,currency), sub:pct+'% of budget · '+committedCt+' items committed',  color:'#3B82F6'},
+    {icon:'package', label:'Procurement Items',value:items.length,             sub:committedCt+' committed · '+deliv+' delivered',       color:'#A78BFA'},
+    {icon:'check',   label:'Delivery Rate',    value:(items.length?Math.round((deliv/items.length)*100):0)+'%', sub:deliv+' of '+items.length+' items delivered', color:'#34D399'},
   ];
+
+  function WHead(id,title,icon,col){
+    return <div style={{padding:'13px 18px',borderBottom:wVis[id]?'none':'1px solid var(--c-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:28,height:28,borderRadius:7,background:col+'1a',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n={icon} size={13} color={col}/></div>
+        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text1)'}}>{title}</span>
+      </div>
+      <button onClick={function(){toggleW(id);}} title={wVis[id]?'Show':'Hide'}
+        style={{background:'transparent',border:'none',padding:5,cursor:'pointer',color:wVis[id]?'var(--c-text5)':'var(--c-text4)',display:'flex',alignItems:'center',borderRadius:6}}>
+        <Ico n={wVis[id]?'eyeoff':'eye'} size={14}/>
+      </button>
+    </div>;
+  }
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
+
+      {/* ── Stat cards ── */}
       <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
         {cards.map(function(c){return(
           <div key={c.label} style={{background:'var(--c-surface)',borderRadius:12,border:'1px solid var(--c-border)',padding:'18px 20px'}}>
@@ -1919,72 +2062,208 @@ function Dashboard(props) {
           </div>
         );})}
       </div>
-      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'16px 22px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:10}}>
-          <div>
-            <div style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:4}}>Budget Utilization</div>
-            <div style={{fontSize:13.5,color:'var(--c-text3)'}}>{fmt(tSpend,currency)} <span style={{color:'var(--c-text5)'}}>of {fmt(tBudget,currency)}</span></div>
-          </div>
-          <span style={{fontSize:24,fontWeight:700,color:barCol}}>{pct}%</span>
-        </div>
-        <div style={{height:8,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
-          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:'linear-gradient(90deg,'+barCol+'cc,'+barCol+')',transition:'width .5s'}}/>
-        </div>
-      </div>
-      <div className='chart-row' style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:14}}>
-        <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Spend by Project</div>
-          <BarChart data={chartData} height={200} currency={currency}/>
-        </div>
-        <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px',display:'flex',flexDirection:'column'}}>
-          <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Pipeline Overview</div>
-          <div style={{display:'flex',flexDirection:'column',gap:12,flex:1}}>
-            {stageRows.map(function(row){
-              var cfg=SC[row.name],p=items.length?Math.round((row.count/items.length)*100):0;
-              return(<div key={row.name}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                  <span style={{fontSize:12,color:cfg.color}}>{row.name}</span>
-                  <span style={{fontSize:12,color:'var(--c-text5)'}}>{row.count} items ({p}%)</span>
-                </div>
-                <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p+'%',background:cfg.color,opacity:.7}}/></div>
-              </div>);
-            })}
-          </div>
-          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--c-border2)'}}>
-            <div style={{fontSize:10.5,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Overall Delivery Rate</div>
-            <div style={{fontSize:22,fontWeight:700,color:'#34D399'}}>{items.length?Math.round((deliv/items.length)*100):0}%</div>
-          </div>
-        </div>
-      </div>
-      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
-        <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Project Summary</div>
-        {!projects.length&&<div style={{fontSize:13,color:'var(--c-text5)',textAlign:'center',padding:'20px 0'}}>No projects yet.</div>}
-        {projects.map(function(p,idx){
-          var pi=items.filter(function(i){return i.projectId===p.id;});
-          var ps=pi.reduce(function(s,i){return s+i.cost;},0);
-          var mpAct=mpActCostForProject(manpower,p.id);
-          var mpEst=mpEstCostForProject(manpower,p.id);
-          var mpS=mpAct>0?mpAct:mpEst;
-          var totalSpend=ps+mpS;
-          var totalBudget=(p.budget||0)+(p.manpower_budget||0);
-          var pp=totalBudget?Math.min(100,Math.round((totalSpend/totalBudget)*100)):0;
-          var pd=pi.filter(function(i){return i.status==='Delivered';}).length;
-          return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:14,padding:'10px 0',borderBottom:idx<projects.length-1?'1px solid var(--c-border)':'none'}}>
-            <div style={{width:9,height:9,borderRadius:'50%',background:p.color,flexShrink:0}}/>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
-                <span style={{fontSize:13,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                {mpS>0&&<span style={{fontSize:10,color:MP_COLOR,background:'rgba(167,139,250,.1)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(167,139,250,.2)',whiteSpace:'nowrap',flexShrink:0}}>+MP</span>}
+
+      {/* ── Widget 1: Budget Utilization ── */}
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+        {WHead('util','Budget Utilization','dollar','#F59E0B')}
+        {!wVis['util']&&(
+          <div style={{padding:'16px 18px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div>
+                <div style={{fontSize:13.5,color:'var(--c-text2)'}}>{fmt(tCommitted,currency)} committed <span style={{color:'var(--c-text5)'}}>of {fmt(tBudget,currency)} budget</span></div>
+                <div style={{fontSize:11,color:'var(--c-text5)',marginTop:2}}>Procurement est: {fmt(tProcEst,currency)} · Committed: {fmt(tProcComm,currency)}</div>
               </div>
-              <div style={{height:3,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pp+'%',background:p.color}}/></div>
+              <span style={{fontSize:30,fontWeight:700,color:barCol,flexShrink:0}}>{pct}%</span>
             </div>
-            <div style={{textAlign:'right',flexShrink:0}}>
-              <div style={{fontSize:12.5,fontWeight:600,color:'var(--c-text2)'}}>{fmt(totalSpend,currency)}</div>
-              <div style={{fontSize:11,color:'var(--c-text5)'}}>{pd}/{pi.length} delivered</div>
+            {/* Procurement pool */}
+            <div style={{marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                <span style={{fontSize:11.5,color:'var(--c-text4)',fontWeight:600}}>Procurement Pool</span>
+                <span style={{fontSize:11.5,color:'var(--c-text3)'}}>{fmt(tProcComm,currency)} committed / {fmt(tProcBudget,currency)} budget</span>
+              </div>
+              <div style={{position:'relative',height:10,background:'var(--c-bg)',borderRadius:999,overflow:'hidden',marginBottom:3}}>
+                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tProcBudget?Math.min(100,(tProcEst/tProcBudget)*100)+'%':'0%',background:'rgba(96,165,250,.18)'}}/>
+                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tProcBudget?Math.min(100,(tProcComm/tProcBudget)*100)+'%':'0%',background:'linear-gradient(90deg,#3B82F6cc,#3B82F6)'}}/>
+              </div>
+              <div style={{display:'flex',gap:14,fontSize:10.5,color:'var(--c-text5)'}}>
+                <span><span style={{color:'rgba(96,165,250,.6)'}}>▬</span> Estimated {fmt(tProcEst,currency)}</span>
+                <span><span style={{color:'#3B82F6'}}>▬</span> Committed {fmt(tProcComm,currency)}</span>
+              </div>
             </div>
-          </div>);
-        })}
+            {/* Manpower pool */}
+            <div style={{marginBottom:18}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                <span style={{fontSize:11.5,color:'var(--c-text4)',fontWeight:600}}>Manpower Pool</span>
+                <span style={{fontSize:11.5,color:'var(--c-text3)'}}>{fmt(tMPSpend,currency)} actual / {fmt(tMPBudget,currency)} budget</span>
+              </div>
+              <div style={{position:'relative',height:10,background:'var(--c-bg)',borderRadius:999,overflow:'hidden',marginBottom:3}}>
+                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tMPBudget?Math.min(100,(tMPEst/tMPBudget)*100)+'%':'0%',background:'rgba(167,139,250,.18)'}}/>
+                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tMPBudget?Math.min(100,(tMPSpend/tMPBudget)*100)+'%':'0%',background:'linear-gradient(90deg,'+MP_COLOR+'cc,'+MP_COLOR+')'}}/>
+              </div>
+              <div style={{display:'flex',gap:14,fontSize:10.5,color:'var(--c-text5)'}}>
+                <span><span style={{color:'rgba(167,139,250,.5)'}}>▬</span> Estimated {fmt(tMPEst,currency)}</span>
+                <span><span style={{color:MP_COLOR}}>▬</span> Actual {fmt(tMPSpend,currency)}</span>
+              </div>
+            </div>
+            {/* Per-project rows */}
+            <div style={{borderTop:'1px solid var(--c-border)',paddingTop:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:10}}>By Project</div>
+              {projects.map(function(p){
+                var procComm=procCommittedForProject(items,p.id);
+                var mpAct=mpActCostForProject(manpower,p.id),mpEst=mpEstCostForProject(manpower,p.id);
+                var mpS=mpAct>0?mpAct:mpEst;
+                var totBudget=(p.budget||0)+(p.manpower_budget||0);
+                var totComm=procComm+mpS;
+                var pp=totBudget?Math.min(100,Math.round((totComm/totBudget)*100)):0;
+                var over=totComm>totBudget;
+                var procPct=p.budget?Math.min(100,Math.round((procComm/p.budget)*100)):0;
+                var mpPct=p.manpower_budget?Math.min(100,Math.round((mpS/p.manpower_budget)*100)):0;
+                return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'7px 0',borderBottom:'1px solid var(--c-border)'}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:p.color,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
+                      <span style={{fontSize:12.5,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                      {over&&<span style={{fontSize:9.5,color:'#F87171',background:'rgba(248,113,113,.1)',padding:'1px 5px',borderRadius:999,border:'1px solid rgba(248,113,113,.2)',whiteSpace:'nowrap',flexShrink:0}}>OVER BUDGET</span>}
+                    </div>
+                    <div style={{display:'flex',gap:4}}>
+                      <div title="Procurement" style={{flex:p.budget||1,height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+                        <div style={{height:'100%',borderRadius:999,width:procPct+'%',background:'#3B82F6'}}/>
+                      </div>
+                      {p.manpower_budget>0&&<div title="Manpower" style={{flex:p.manpower_budget||1,height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+                        <div style={{height:'100%',borderRadius:999,width:mpPct+'%',background:MP_COLOR}}/>
+                      </div>}
+                    </div>
+                  </div>
+                  <div style={{textAlign:'right',flexShrink:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:over?'#F87171':'var(--c-text2)'}}>{fmt(totComm,currency)}</div>
+                    <div style={{fontSize:10.5,color:'var(--c-text5)'}}>{pp}% of {fmt(totBudget,currency)}</div>
+                  </div>
+                </div>);
+              })}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* ── Widget 2: S-Curve Burn-Down ── */}
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+        {WHead('scurve','Spend Burn-Down (S-Curve)','chartline','#60A5FA')}
+        {!wVis['scurve']&&(
+          <div style={{padding:'16px 18px'}}>
+            <div style={{display:'flex',gap:20,marginBottom:12}}>
+              <div style={{fontSize:12,color:'var(--c-text5)'}}>Cumulative planned vs committed spend over delivery schedule. Dashed = planned, solid = committed.</div>
+            </div>
+            {sCurveData.length<2
+              ? <div style={{height:180,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-text5)',fontSize:12}}>Add procurement items with delivery dates to see the S-curve.</div>
+              : <LineChart data={sCurveData} height={220} currency={currency}/>
+            }
+          </div>
+        )}
+      </div>
+
+      {/* ── Widget 3: EAC ── */}
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+        {WHead('eac','Forecast at Completion (EAC)','alert','#FBBF24')}
+        {!wVis['eac']&&(
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:720}}>
+              <thead>
+                <tr>{['Project','Proc Budget','Committed','MP Budget','MP Actual','Total Budget','EAC','Variance'].map(function(h){
+                  return <th key={h} style={{padding:'10px 10px',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',textAlign:h==='Project'?'left':'right',background:'var(--c-bg)',borderBottom:'1px solid var(--c-border)'}}>{h}</th>;
+                })}</tr>
+              </thead>
+              <tbody>
+                {eacData.map(function(p){
+                  var vCol=p.variance<0?'#F87171':p.variance<p.totalBudget*.1?'#FBBF24':'#34D399';
+                  return <tr key={p.id}>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',fontSize:12.5}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <div style={{width:7,height:7,borderRadius:'50%',background:p.color}}/>
+                        <span style={{color:'var(--c-text2)',fontWeight:500}}>{p.name}</span>
+                        {p.overrun&&<span style={{fontSize:9,color:'#F87171',background:'rgba(248,113,113,.1)',padding:'1px 5px',borderRadius:999,border:'1px solid rgba(248,113,113,.25)'}}>OVERRUN</span>}
+                      </div>
+                    </td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:'var(--c-text3)'}}>{fmt(p.procBudget,currency)}</td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:'#60A5FA',fontWeight:600}}>{fmt(p.procComm,currency)}</td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:'var(--c-text3)'}}>{fmt(p.mpBudget,currency)}</td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:MP_COLOR}}>{fmt(p.mpEAC,currency)}</td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12.5,fontWeight:700,color:'var(--c-text2)'}}>{fmt(p.totalBudget,currency)}</td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12.5,fontWeight:700,color:p.overrun?'#F87171':'var(--c-text1)'}}>{fmt(p.totalEAC,currency)}</td>
+                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,fontWeight:600,color:vCol}}>
+                      {p.variance>=0?'+':''}{fmt(p.variance,currency)}
+                    </td>
+                  </tr>;
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{background:'var(--c-bg)'}}>
+                  <td colSpan={5} style={{padding:'10px',fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.4px'}}>Portfolio Total</td>
+                  <td style={{padding:'10px',textAlign:'right',fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(eacData.reduce(function(s,p){return s+p.totalBudget;},0),currency)}</td>
+                  <td style={{padding:'10px',textAlign:'right',fontSize:13,fontWeight:700,color:eacData.some(function(p){return p.overrun;})?'#F87171':'#34D399'}}>{fmt(eacData.reduce(function(s,p){return s+p.totalEAC;},0),currency)}</td>
+                  <td style={{padding:'10px',textAlign:'right',fontSize:12,fontWeight:600,color:(function(){var v=eacData.reduce(function(s,p){return s+p.variance;},0);return v>=0?'#34D399':'#F87171';})()}}>
+                    {(function(){var v=eacData.reduce(function(s,p){return s+p.variance;},0);return(v>=0?'+':'')+fmt(v,currency);})()}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Widget 4: Cash Flow / Commitment View ── */}
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+        {WHead('cashflow','Commitment / Cash Flow','calendar','#A78BFA')}
+        {!wVis['cashflow']&&(
+          <div style={{padding:'16px 18px'}}>
+            {!cfData.length
+              ? <div style={{height:100,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-text5)',fontSize:12}}>No items with delivery dates yet.</div>
+              : <div>
+                  <div style={{overflowX:'auto',paddingBottom:8}}>
+                    <div style={{display:'flex',gap:12,minWidth:'max-content',alignItems:'flex-end',paddingBottom:4}}>
+                      {cfData.map(function(m){
+                        var d=new Date(m.month+'-01');
+                        var label=d.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+                        var planH=Math.max(6,Math.round((m.planned/cfMaxV)*110));
+                        var commH=m.committed>0?Math.max(6,Math.round((m.committed/cfMaxV)*110)):0;
+                        var over=m.committed>m.planned;
+                        return <div key={m.month} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,minWidth:70}}>
+                          <div style={{fontSize:9.5,color:'var(--c-text5)',textAlign:'center'}}>{fmt(m.planned,currency)}</div>
+                          <div style={{display:'flex',gap:5,alignItems:'flex-end',height:120}}>
+                            <div title="Planned" style={{width:22,background:'rgba(96,165,250,.2)',borderRadius:'3px 3px 0 0',height:planH+'px',border:'1px solid rgba(96,165,250,.35)'}}/>
+                            {commH>0&&<div title="Committed" style={{width:22,background:over?'rgba(248,113,113,.45)':'rgba(52,211,153,.35)',borderRadius:'3px 3px 0 0',height:commH+'px',border:'1px solid '+(over?'rgba(248,113,113,.55)':'rgba(52,211,153,.45)')}}/>}
+                          </div>
+                          <div style={{fontSize:10.5,fontWeight:600,color:'var(--c-text4)',textAlign:'center'}}>{label}</div>
+                          {commH>0&&<div style={{fontSize:9,color:over?'#F87171':'#34D399',textAlign:'center'}}>{fmt(m.committed,currency)}</div>}
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:18,marginTop:4}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
+                      <div style={{width:12,height:12,borderRadius:2,background:'rgba(96,165,250,.2)',border:'1px solid rgba(96,165,250,.35)'}}/>Planned
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
+                      <div style={{width:12,height:12,borderRadius:2,background:'rgba(52,211,153,.35)',border:'1px solid rgba(52,211,153,.45)'}}/>Committed
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
+                      <div style={{width:12,height:12,borderRadius:2,background:'rgba(248,113,113,.45)',border:'1px solid rgba(248,113,113,.55)'}}/>Over Planned
+                    </div>
+                  </div>
+                  {/* Pipeline summary */}
+                  <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--c-border)',display:'flex',gap:18,flexWrap:'wrap'}}>
+                    {stageRows.map(function(row){var cfg=SC[row.name];return <div key={row.name} style={{display:'flex',alignItems:'center',gap:8}}>
+                      <div style={{width:8,height:8,borderRadius:'50%',background:cfg.color}}/>
+                      <span style={{fontSize:12,color:cfg.color,fontWeight:600}}>{row.count}</span>
+                      <span style={{fontSize:11.5,color:'var(--c-text5)'}}>{row.name}</span>
+                    </div>;})}
+                    <div style={{marginLeft:'auto',fontSize:11,color:'var(--c-text5)'}}>Overall delivery: <strong style={{color:'#34D399'}}>{items.length?Math.round((deliv/items.length)*100):0}%</strong></div>
+                  </div>
+                </div>
+            }
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
@@ -1994,18 +2273,22 @@ function ProjectsList(props) {
   var projects=props.projects,items=props.items,currency=props.currency,rates=props.rates,manpower=props.manpower||[],onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
   var stats=useMemo(function(){return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
-    var spend=pi.reduce(function(s,i){return s+i.cost;},0);
     var projCur=p.currency||currency;
     var hasMixed=pi.some(function(i){return i.item_currency&&i.item_currency!==projCur;});
-    var convertedSpend=hasMixed&&rates?pi.reduce(function(s,i){var ic=i.item_currency||projCur;return s+((rates[ic]&&rates[projCur])?convert(i.cost,ic,projCur,rates):i.cost);},0):null;
-    var procureSpend=convertedSpend!=null?convertedSpend:spend;
+    var procComm=procCommittedForProject(items,p.id);
+    var procEst=procEstForProject(items,p.id);
+    var convertedComm=hasMixed&&rates?pi.filter(function(i){return isCommitted(i.status);}).reduce(function(s,i){var ic=i.item_currency||projCur,c=i.act_cost!=null?i.act_cost:i.cost;return s+((rates[ic]&&rates[projCur])?convert(c,ic,projCur,rates):c);},0):null;
+    var procCommDisplay=convertedComm!=null?convertedComm:procComm;
     var mpAct=mpActCostForProject(manpower,p.id);
     var mpEst=mpEstCostForProject(manpower,p.id);
     var mpSpend=mpAct>0?mpAct:mpEst;
-    var displaySpend=procureSpend+mpSpend;
+    var totalCommitted=procCommDisplay+mpSpend;
     var totalBudget=(p.budget||0)+(p.manpower_budget||0);
+    var procPct=p.budget?Math.min(100,Math.round((procCommDisplay/p.budget)*100)):0;
+    var mpPct=p.manpower_budget?Math.min(100,Math.round((mpSpend/p.manpower_budget)*100)):0;
+    var pct=totalBudget?Math.min(110,Math.round((totalCommitted/totalBudget)*100)):0;
     var sc={};STAGES.forEach(function(s){sc[s]=pi.filter(function(i){return i.status===s;}).length;});
-    return Object.assign({},p,{spend:spend,convertedSpend:convertedSpend,hasMixed:hasMixed,displaySpend:displaySpend,pct:Math.min(100,Math.round((displaySpend/totalBudget)*100)),sc:sc,mpSpend:mpSpend,totalBudget:totalBudget});
+    return Object.assign({},p,{procComm:procCommDisplay,procEst:procEst,hasMixed:hasMixed,totalCommitted:totalCommitted,pct:pct,procPct:procPct,mpPct:mpPct,sc:sc,mpSpend:mpSpend,totalBudget:totalBudget,over:totalCommitted>totalBudget});
   });},[projects,items,rates,currency,manpower]);
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
@@ -2029,16 +2312,33 @@ function ProjectsList(props) {
                 </div>
               </div>
               <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Total Spend</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.displaySpend,p.currency||currency)} / {fmt(p.totalBudget,p.currency||currency)}</span></div>
-                {p.hasMixed&&p.convertedSpend!=null&&<div style={{fontSize:10,color:'#F59E0B',textAlign:'right',marginBottom:3}}>≈ converted to {p.currency||currency}</div>}
-                {p.mpSpend>0&&<div style={{fontSize:10,color:MP_COLOR,textAlign:'right',marginBottom:3}}>incl. ${p.mpSpend.toLocaleString('en-US',{maximumFractionDigits:0})} manpower</div>}
-                <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                  <span style={{fontSize:11,color:'var(--c-text5)'}}>Committed</span>
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    {p.over&&<span style={{fontSize:9.5,color:'#F87171',background:'rgba(248,113,113,.1)',padding:'1px 5px',borderRadius:999,border:'1px solid rgba(248,113,113,.2)'}}>OVER</span>}
+                    <span style={{fontSize:11,color:p.over?'#F87171':'var(--c-text3)'}}>{fmt(p.totalCommitted,p.currency||currency)} / {fmt(p.totalBudget,p.currency||currency)}</span>
+                  </div>
+                </div>
+                {p.hasMixed&&<div style={{fontSize:10,color:'#F59E0B',textAlign:'right',marginBottom:2}}>≈ converted to {p.currency||currency}</div>}
+                <div style={{display:'flex',gap:3,marginBottom:4}}>
+                  <div title="Procurement" style={{flex:Math.max(1,p.budget||0),height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:999,width:p.procPct+'%',background:p.procPct>100?'#EF4444':p.color}}/>
+                  </div>
+                  {p.manpower_budget>0&&<div title="Manpower" style={{flex:Math.max(1,p.manpower_budget||0),height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+                    <div style={{height:'100%',borderRadius:999,width:p.mpPct+'%',background:p.mpPct>100?'#EF4444':MP_COLOR}}/>
+                  </div>}
+                </div>
+                <div style={{display:'flex',gap:10,fontSize:10,color:'var(--c-text5)'}}>
+                  <span>Proc: {fmt(p.procComm,p.currency||currency)}</span>
+                  {p.mpSpend>0&&<span style={{color:MP_COLOR}}>MP: {fmt(p.mpSpend,p.currency||currency)}</span>}
+                  <span style={{marginLeft:'auto'}}>{p.pct}%</span>
+                </div>
               </div>
               <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
                 {STAGES.map(function(s){var cnt=p.sc[s]||0,cfg=SC[s];return(<div key={s} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:999,background:cfg.bg,border:'1px solid '+cfg.color+'25'}}><span style={{fontSize:9.5,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.4px'}}>{s}</span><span style={{fontSize:11.5,fontWeight:700,color:cfg.color}}>{cnt}</span></div>);})}
               </div>
               <button onClick={function(){onSelect(p.id);}} style={{width:'100%',padding:'9px',background:p.color+'14',border:'1px solid '+p.color+'28',borderRadius:8,color:p.color,fontSize:12.5,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                View Equipment <Ico n="chevr" size={13}/>
+                View Project <Ico n="chevr" size={13}/>
               </button>
             </div>
           </div>
@@ -2057,16 +2357,17 @@ function Kanban(props) {
   var _vt=useState('equipment'),viewTab=_vt[0],setViewTab=_vt[1];
   var pi=useMemo(function(){var q=search.toLowerCase();return items.filter(function(i){return i.projectId===project.id&&(!q||i.name.toLowerCase().includes(q)||i.vendor.toLowerCase().includes(q));});},[items,project.id,search]);
   var allPi=items.filter(function(i){return i.projectId===project.id;});
-  var spend=allPi.reduce(function(s,i){return s+i.cost;},0);
+  var procEst=allPi.reduce(function(s,i){return s+(i.cost||0);},0);
+  var procComm=procCommittedForProject(items,project.id);
   var hasMixedCur=allPi.some(function(i){return i.item_currency&&i.item_currency!==currency;});
-  var convertedSpend=hasMixedCur&&rates?allPi.reduce(function(s,i){var ic=i.item_currency||currency;return s+((rates[ic]&&rates[currency])?convert(i.cost,ic,currency,rates):i.cost);},0):null;
-  var procureSpend=convertedSpend!=null?convertedSpend:spend;
   var mpEstC=mpEstCostForProject(manpower,project.id);
   var mpActC=mpActCostForProject(manpower,project.id);
   var mpSpend=mpActC>0?mpActC:mpEstC;
-  var displaySpend=procureSpend+mpSpend;
+  var totalCommitted=procComm+mpSpend;
+  var totalEst=procEst+mpEstC;
   var totalBudget=(project.budget||0)+(project.manpower_budget||0);
-  var pct=Math.min(100,Math.round((displaySpend/Math.max(1,totalBudget))*100));
+  var pct=Math.min(100,Math.round((totalCommitted/Math.max(1,totalBudget))*100));
+  var pctEst=Math.min(100,Math.round((totalEst/Math.max(1,totalBudget))*100));
   var deliv=allPi.filter(function(i){return i.status==='Delivered';}).length;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -2086,31 +2387,44 @@ function Kanban(props) {
           </div>
         </div>
       </div>
-      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
+      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))',gap:10}}>
         {[
-          ['Budget',fmt(totalBudget,currency),project.manpower_budget>0?'incl. '+fmt(project.manpower_budget,currency)+' manpower':'Allocated'],
-          ['Total Spend',fmt(displaySpend,currency),pct+'% utilized'],
-          ['Manpower',fmt(mpSpend,currency),mpActC>0?'actual cost':'estimated cost'],
-          ['Procurement',fmt(procureSpend,currency),convertedSpend!=null?'converted to '+currency:allPi.length+' items'],
-          ['Items',allPi.length,'Total'],
-          ['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length],
-        ].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:18,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:(r[0]==='Manpower')?MP_COLOR:'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
+          {label:'Total Budget',   value:fmt(totalBudget,currency),  sub:project.manpower_budget>0?fmt(project.budget||0,currency)+' proc + '+fmt(project.manpower_budget,currency)+' MP':'Allocated', col:'#F59E0B'},
+          {label:'Proc Committed', value:fmt(procComm,currency),     sub:procEst>procComm?'Est: '+fmt(procEst,currency):'Fully committed',                                                             col:'#3B82F6'},
+          {label:'Manpower',       value:fmt(mpSpend,currency),      sub:mpActC>0?'actual cost':'estimated cost',                                                                                     col:MP_COLOR},
+          {label:'Items',          value:allPi.length,               sub:(allPi.filter(function(i){return isCommitted(i.status);}).length)+' committed · '+deliv+' delivered',                        col:'#A78BFA'},
+          {label:'Committed %',    value:pct+'%',                    sub:'of '+fmt(totalBudget,currency)+' budget',                                                                                    col:pct>100?'#EF4444':pct>85?'#F59E0B':'#34D399'},
+          {label:'Delivery Rate',  value:(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%', sub:deliv+' of '+allPi.length+' items',                                                          col:'#34D399'},
+        ].map(function(r){return(<div key={r.label} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r.label}</div><div style={{fontSize:18,fontWeight:700,color:r.col,lineHeight:1}}>{r.value}</div><div style={{fontSize:10.5,color:'var(--c-text5)',marginTop:3}}>{r.sub}</div></div>);})}
       </div>
       <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'11px 16px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:5}}>
-          <div>
-            <span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span>
-            {project.manpower_budget>0&&<span style={{fontSize:10,color:MP_COLOR,marginLeft:8}}>Procurement + Manpower</span>}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
+          <span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization — Committed vs Estimated vs Budget</span>
+          <span style={{fontSize:12,fontWeight:600,color:pct>100?'#EF4444':pct>85?'#F59E0B':'#34D399'}}>{pct}%</span>
+        </div>
+        {/* Procurement pool */}
+        <div style={{marginBottom:6}}>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--c-text5)',marginBottom:3}}>
+            <span>Procurement</span><span>{fmt(procComm,currency)} committed · {fmt(project.budget||0,currency)} budget</span>
           </div>
-          <span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span>
+          <div style={{height:7,background:'var(--c-bg)',borderRadius:999,position:'relative',overflow:'hidden'}}>
+            <div style={{position:'absolute',height:'100%',borderRadius:999,width:project.budget?Math.min(100,(procEst/(project.budget||1))*100)+'%':'0%',background:'rgba(59,130,246,.18)'}}/>
+            <div style={{position:'absolute',height:'100%',borderRadius:999,width:project.budget?Math.min(100,(procComm/(project.budget||1))*100)+'%':'0%',background:project.color}}/>
+          </div>
         </div>
-        <div style={{height:6,background:'var(--c-bg)',borderRadius:999,position:'relative'}}>
-          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/>
-          {totalBudget>0&&mpSpend>0&&<div style={{position:'absolute',top:0,left:Math.min(100,Math.round((procureSpend/totalBudget)*100))+'%',height:'100%',borderRadius:'0 999px 999px 0',width:Math.min(100-Math.min(100,Math.round((procureSpend/totalBudget)*100)),Math.round((mpSpend/totalBudget)*100))+'%',background:MP_COLOR}}/>}
-        </div>
-        <div style={{display:'flex',gap:12,marginTop:6,fontSize:10,color:'var(--c-text5)'}}>
-          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:project.color,display:'inline-block'}}/>Procurement {fmt(procureSpend,currency)}</span>
-          {mpSpend>0&&<span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:MP_COLOR,display:'inline-block'}}/>{mpActC>0?'Act.':'Est.'} Manpower {fmt(mpSpend,currency)}</span>}
+        {/* Manpower pool */}
+        {project.manpower_budget>0&&<div>
+          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--c-text5)',marginBottom:3}}>
+            <span>Manpower</span><span>{fmt(mpSpend,currency)} {mpActC>0?'actual':'estimated'} · {fmt(project.manpower_budget,currency)} budget</span>
+          </div>
+          <div style={{height:7,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+            <div style={{height:'100%',borderRadius:999,width:project.manpower_budget?Math.min(100,(mpSpend/(project.manpower_budget||1))*100)+'%':'0%',background:MP_COLOR}}/>
+          </div>
+        </div>}
+        <div style={{display:'flex',gap:14,marginTop:6,fontSize:10,color:'var(--c-text5)'}}>
+          <span><span style={{color:'rgba(59,130,246,.4)'}}>▬</span> Est. {fmt(procEst,currency)}</span>
+          <span><span style={{color:project.color}}>▬</span> Committed {fmt(procComm,currency)}</span>
+          {mpSpend>0&&<span><span style={{color:MP_COLOR}}>▬</span> Manpower {fmt(mpSpend,currency)}</span>}
         </div>
       </div>
 
@@ -2154,8 +2468,10 @@ function Kanban(props) {
                 var orderBy   = item.order_by_date || calcOrderBy(item.delivery_date||item.deadline, item.lead_time_days);
                 var urgency   = urgencyLabel(orderBy, item.status);
                 var itemCur   = item.item_currency || currency;
-                var totalCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
-                var convertedCost = (itemCur!==currency&&rates&&rates[itemCur]&&rates[currency])?convert(totalCost,itemCur,currency,rates):null;
+                var estCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
+                var actCost = item.act_cost;
+                var totalCost = estCost;
+                var convertedCost = (itemCur!==currency&&rates&&rates[itemCur]&&rates[currency])?convert(actCost!=null?actCost:estCost,itemCur,currency,rates):null;
                 return(
                 <div key={item.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
                   {/* Name */}
@@ -2164,17 +2480,14 @@ function Kanban(props) {
 
                   {/* Cost breakdown */}
                   <div style={{background:'var(--c-bg)',borderRadius:6,padding:'7px 9px',marginBottom:8}}>
-                    {item.qty>1 ? (
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty} × {fmt(item.unit_cost||0,itemCur)}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,itemCur)}</span>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty>1?item.qty+' × '+fmt(item.unit_cost||0,itemCur):item.category}</span>
+                      <div style={{textAlign:'right'}}>
+                        <div style={{fontSize:13,fontWeight:700,color:actCost!=null&&isCommitted(item.status)?'#60A5FA':'var(--c-text2)'}}>{fmt(actCost!=null&&isCommitted(item.status)?actCost:estCost,itemCur)}</div>
+                        {actCost!=null&&isCommitted(item.status)&&actCost!==estCost&&<div style={{fontSize:9.5,color:'var(--c-text5)',textDecoration:'line-through'}}>{fmt(estCost,itemCur)} est.</div>}
                       </div>
-                    ) : (
-                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.category}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,itemCur)}</span>
-                      </div>
-                    )}
+                    </div>
+                    {actCost!=null&&isCommitted(item.status)&&<div style={{fontSize:9.5,color:'#60A5FA',marginTop:2}}>Committed PO amount</div>}
                     {item.qty>1&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{item.category}</div>}
                     {itemCur!==currency&&(convertedCost!=null
                       ?<div style={{fontSize:10.5,color:'#F59E0B',marginTop:3,fontWeight:500}}>≈ {fmt(convertedCost,currency)}</div>
