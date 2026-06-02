@@ -229,12 +229,6 @@ function dOnly(s){ return s ? String(s).slice(0,10) : ''; }
 /* Clamp FTE to the 0–1 range */
 function clampFte(v){ var n=parseFloat(v); if(isNaN(n))return 0; return Math.max(0,Math.min(1,n)); }
 
-/* Normalize any date value to YYYY-MM-DD for <input type="date"> + calcDays.
-   Supabase may return a full ISO timestamp which date inputs cannot display. */
-function dOnly(s){ return s ? String(s).slice(0,10) : ''; }
-/* Clamp FTE to the 0–1 range */
-function clampFte(v){ var n=parseFloat(v); if(isNaN(n))return 0; return Math.max(0,Math.min(1,n)); }
-
 function calcDays(s, e) {
   if (!s || !e) return 0;
   var sd = new Date(dOnly(s)), ed = new Date(dOnly(e));
@@ -1450,13 +1444,13 @@ function ManpowerTab(props) {
 
   var grandEstD=0,grandEstC=0,grandActD=0,grandActC=0;
   pm.forEach(function(m){
-    var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+    var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
     grandEstD+=(m.est_hours||0)*qty; grandActD+=(m.act_hours||0)*qty;
     grandEstC+=(m.est_hours||0)*qty*fte*rate; grandActC+=(m.act_hours||0)*qty*fte*rate;
   });
 
   /* est_hours column stores estimated days (auto from dates); act_hours stores actual days (manual) */
-  function blankForm(){return{description:'',manpower_type:MANPOWER_TYPES[0],qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
+  function blankForm(){return{description:'',manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
   function upd(form,k,v){return Object.assign({},form,{[k]:v});}
   function calc(form){
     var rate=rm[form.manpower_type]||0;
@@ -1499,7 +1493,7 @@ function ManpowerTab(props) {
               'Est. Cost (USD)','Act. Days','Act. Cost (USD)'];
     var rows=[cols];
     pm.forEach(function(m){
-      var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,days=m.est_hours||calcDays(m.start_date,m.end_date);
+      var rate=rm[m.manpower_type]||0,qty=m.qty||1,days=m.est_hours||calcDays(m.start_date,m.end_date);
       var fte=m.fte!=null?m.fte:1,actDays=m.act_hours||0;
       rows.push([m.description||'',m.manpower_type,rate,qty,dOnly(m.start_date),dOnly(m.end_date),days,fte,
                  rate*days*fte*qty, actDays, rate*actDays*fte*qty]);
@@ -1638,7 +1632,7 @@ function ManpowerTab(props) {
               if(editingRow&&editingRow.id===m.id){
                 return <EditRow key={m.id} form={editingRow.form} setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}} onCommit={commitEdit} onCancel={function(){setEditingRow(null);}} isNew={false}/>;
               }
-              var rate=MANPOWER_RATES[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
+              var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
               var days=m.est_hours||calcDays(m.start_date,m.end_date);
               var actDays=m.act_hours||0;
               var estC=rate*days*fte*qty, actC=rate*actDays*fte*qty;
