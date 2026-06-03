@@ -1430,6 +1430,198 @@ function ApplyTemplateModal(props) {
   );
 }
 
+/* ── Manpower Tab shared styles ────────────────────────────── */
+var MT_ISM={background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'5px 7px',color:'var(--c-text2)',fontSize:12,width:'100%',minWidth:0};
+var MT_TH={padding:'7px 8px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
+var MT_THR=Object.assign({},MT_TH,{textAlign:'right'});
+var MT_TD={padding:'8px 8px',fontSize:12.5,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
+var MT_TDR=Object.assign({},MT_TD,{textAlign:'right'});
+var MT_TDE=Object.assign({},MT_TD,{padding:'5px 6px'});
+
+/* Always-editable entry row — stable top-level component (not redefined per render). */
+function LiveEntryRow(rp){
+  var m=rp.m, bdays=rp.bdays||0, activityId=rp.activityId, rm=rp.rm, manpowerTypes=rp.manpowerTypes||[];
+  var onSaveEntry=rp.onSaveEntry, onDeleteEntry=rp.onDeleteEntry, projectId=rp.projectId;
+  var _q=useState(String(m.qty!=null?m.qty:1)),qty=_q[0],setQty=_q[1];
+  var _ft=useState(String(m.fte!=null?m.fte:1)),fteStr=_ft[0],setFteStr=_ft[1];
+  var _ftf=useState(false),ftFocused=_ftf[0],setFtFocused=_ftf[1];
+  var _ad=useState(String(m.act_hours!=null?m.act_hours:0)),adStr=_ad[0],setAdStr=_ad[1];
+  useEffect(function(){setQty(String(m.qty!=null?m.qty:1));},[m.qty]);
+  useEffect(function(){var ext=m.fte!=null?m.fte:1;if(!ftFocused&&parseFloat(fteStr)!==ext)setFteStr(String(ext));},[m.fte,ftFocused]);
+  useEffect(function(){setAdStr(String(m.act_hours!=null?m.act_hours:0));},[m.act_hours]);
+
+  var rate=rm[m.manpower_type]||0;
+  var qtyN=Math.max(1,parseInt(qty)||1);
+  var fteN=clampFte(fteStr.replace(/\.+$/,''));
+  var adN=Math.max(0,parseFloat(adStr)||0);
+  var estC=rate*bdays*fteN*qtyN, actC=rate*adN*fteN*qtyN;
+
+  function save(over){
+    var safeFteN=clampFte(fteStr.replace(/\.+$/,''));
+    onSaveEntry(Object.assign({id:m.id,manpower_type:m.manpower_type,qty:qtyN,fte:safeFteN,est_hours:bdays,act_hours:adN,projectId:projectId,activity_id:activityId},over||{}));
+  }
+  return (
+    <tr onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
+      onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+      <td style={MT_TDE}>
+        <select value={m.manpower_type}
+          onChange={function(e){save({manpower_type:e.target.value});}}
+          style={Object.assign({},MT_ISM,{minWidth:130})}>
+          {manpowerTypes.map(function(t){return <option key={t.id||t.name} value={t.name}>{t.name}</option>;})}
+        </select>
+      </td>
+      <td style={Object.assign({},MT_TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/day</td>
+      <td style={MT_TDE}>
+        <input type="number" min="1" step="1" value={qty}
+          onChange={function(e){setQty(e.target.value);}}
+          onBlur={function(){save();}}
+          style={Object.assign({},MT_ISM,{width:'100%',textAlign:'right'})}/>
+      </td>
+      <td style={MT_TDE}>
+        <input type="text" inputMode="decimal" placeholder="0–1" value={fteStr}
+          onChange={function(e){setFteStr(e.target.value);}}
+          onFocus={function(){setFtFocused(true);}}
+          onBlur={function(){setFtFocused(false);var clamped=String(clampFte(fteStr.replace(/\.+$/,'')));setFteStr(clamped);save();}}
+          style={Object.assign({},MT_ISM,{width:'100%',textAlign:'right'})}/>
+      </td>
+      <td style={Object.assign({},MT_TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+      <td style={MT_TDE}>
+        <input type="number" min="0" step="0.5" value={adStr}
+          onChange={function(e){setAdStr(e.target.value);}}
+          onBlur={function(){save();}}
+          placeholder="0" style={Object.assign({},MT_ISM,{width:'100%',textAlign:'right'})}/>
+      </td>
+      <td style={Object.assign({},MT_TDR,{fontWeight:700,color:'#34D399'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+      <td style={Object.assign({},MT_TDR,{whiteSpace:'nowrap'})}>
+        <button type="button" onClick={function(){onDeleteEntry(m.id);}} title="Remove role"
+          style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer',marginLeft:'auto'}}>
+          <Ico n="trash" size={11}/>
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+/* Activity accordion row — stable top-level component. */
+function ActivitySection(ap){
+  var act=ap.act, collapsed=ap.collapsed, setCollapsed=ap.setCollapsed;
+  var manpower=ap.manpower||[], rm=ap.rm, manpowerTypes=ap.manpowerTypes||[], projectId=ap.projectId;
+  var onSaveEntry=ap.onSaveEntry, onDeleteEntry=ap.onDeleteEntry, onDeleteActivity=ap.onDeleteActivity, saveActivityField=ap.saveActivityField;
+  var isCollapsed = !!collapsed[act.id];
+  var bdays = networkDays(act.start_date, act.end_date);
+  var ents = manpower.filter(function(m){return m.activity_id===act.id;});
+  var actEstC=0, actActC=0;
+  ents.forEach(function(m){
+    var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
+    actEstC+=bdays*qty*fte*rate;
+    actActC+=(m.act_hours||0)*qty*fte*rate;
+  });
+  var _aName=useState(act.name),aName=_aName[0],setAName=_aName[1];
+  var _aStart=useState(dOnly(act.start_date)),aStart=_aStart[0],setAStart=_aStart[1];
+  var _aEnd=useState(dOnly(act.end_date)),aEnd=_aEnd[0],setAEnd=_aEnd[1];
+  useEffect(function(){setAName(act.name);},[act.name]);
+  useEffect(function(){setAStart(dOnly(act.start_date));},[act.start_date]);
+  useEffect(function(){setAEnd(dOnly(act.end_date));},[act.end_date]);
+
+  return (
+    <div style={{border:'1px solid var(--c-border)',borderRadius:10,overflow:'hidden',marginBottom:10}}>
+      {/* Activity header */}
+      <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'var(--c-bg)',borderBottom:isCollapsed?'none':'1px solid var(--c-border)'}}>
+        <button type="button" onClick={function(){setCollapsed(function(c){return Object.assign({},c,{[act.id]:!c[act.id]});})}}
+          style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:2,cursor:'pointer',flexShrink:0}}>
+          <Ico n={isCollapsed?'chevr':'chevl'} size={12}/>
+        </button>
+        <input value={aName}
+          onChange={function(e){setAName(e.target.value);}}
+          onBlur={function(e){if(e.target.value.trim()!==act.name) saveActivityField(act,'name',e.target.value.trim()||act.name);}}
+          style={{flex:1,background:'transparent',border:'none',color:'var(--c-text2)',fontSize:13,fontWeight:600,padding:'2px 4px',borderRadius:4,minWidth:120,outline:'none'}}
+          onFocus={function(e){e.target.style.background='var(--c-input)';e.target.style.border='1px solid var(--c-border2)';}}
+          onBlurCapture={function(e){e.target.style.background='transparent';e.target.style.border='none';}}
+        />
+        <input type="date" value={aStart}
+          onChange={function(e){setAStart(e.target.value);}}
+          onBlur={function(e){if(e.target.value!==dOnly(act.start_date)) saveActivityField(act,'start_date',e.target.value||null);}}
+          style={{background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'3px 6px',color:'var(--c-text3)',fontSize:11.5,colorScheme:'dark',width:116}}/>
+        <span style={{fontSize:11,color:'var(--c-text5)'}}>→</span>
+        <input type="date" value={aEnd}
+          onChange={function(e){setAEnd(e.target.value);}}
+          onBlur={function(e){if(e.target.value!==dOnly(act.end_date)) saveActivityField(act,'end_date',e.target.value||null);}}
+          style={{background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'3px 6px',color:'var(--c-text3)',fontSize:11.5,colorScheme:'dark',width:116}}/>
+        <span style={{fontSize:11.5,fontWeight:700,color:bdays>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap',minWidth:52,textAlign:'right'}}>{bdays>0?bdays+'d biz':'—'}</span>
+        <span style={{fontSize:12,fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap',minWidth:70,textAlign:'right'}}>${actEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+        <button type="button" onClick={function(){if(window.confirm('Delete activity "'+act.name+'" and all its entries?')) onDeleteActivity(act.id);}}
+          style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer',flexShrink:0}}>
+          <Ico n="trash" size={11}/>
+        </button>
+      </div>
+
+      {/* Entry table (hidden when collapsed) */}
+      {!isCollapsed&&(
+        <div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:720,tableLayout:'fixed'}}>
+              <colgroup>
+                <col style={{width:'auto'}}/>
+                <col style={{width:96}}/>
+                <col style={{width:64}}/>
+                <col style={{width:64}}/>
+                <col style={{width:104}}/>
+                <col style={{width:84}}/>
+                <col style={{width:104}}/>
+                <col style={{width:78}}/>
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={Object.assign({},MT_TH,{minWidth:130})}>Type</th>
+                  <th style={MT_THR}>Rate/day</th>
+                  <th style={MT_THR}>Qty</th>
+                  <th style={MT_THR}>FTE</th>
+                  <th style={MT_THR}>Est. Cost</th>
+                  <th style={MT_THR}>Act. Days</th>
+                  <th style={MT_THR}>Act. Cost</th>
+                  <th style={MT_TH}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {ents.map(function(m){
+                  return <LiveEntryRow key={m.id} m={m} bdays={bdays} activityId={act.id} rm={rm} manpowerTypes={manpowerTypes} projectId={projectId} onSaveEntry={onSaveEntry} onDeleteEntry={onDeleteEntry}/>;
+                })}
+              </tbody>
+              {ents.length>0&&(
+                <tfoot>
+                  <tr style={{background:'rgba(167,139,250,.04)'}}>
+                    <td colSpan={4} style={{padding:'7px 8px',fontSize:11,fontWeight:700,color:MP_COLOR,borderTop:'1px solid rgba(167,139,250,.2)'}}>{act.name} Total</td>
+                    <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700,color:'#60A5FA',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}>${actEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                    <td style={{padding:'7px 8px',textAlign:'right',color:'#34D399',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}></td>
+                    <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700,color:'#34D399',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}>${actActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                    <td style={{borderTop:'1px solid rgba(167,139,250,.2)'}}/>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+          {/* Add Role button */}
+          <div style={{padding:'7px 10px',borderTop:'1px solid var(--c-border)'}}>
+            <button type="button"
+              onClick={function(e){
+                e.preventDefault();
+                onSaveEntry({manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:1,fte:1,est_hours:bdays,act_hours:0,projectId:projectId,activity_id:act.id});
+                if(collapsed[act.id]) setCollapsed(function(c){return Object.assign({},c,{[act.id]:false});});
+              }}
+              style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',
+                background:'rgba(167,139,250,.08)',
+                border:'1px dashed rgba(167,139,250,.35)',
+                borderRadius:7,color:MP_COLOR,
+                fontSize:12,fontWeight:600,cursor:'pointer'}}>
+              <Ico n="plus" size={12}/> Add Role
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Manpower Tab (activity accordion) ─────────────────────── */
 function ManpowerTab(props) {
   var project=props.project, manpower=props.manpower||[];
@@ -1508,192 +1700,6 @@ function ManpowerTab(props) {
     XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
   }
 
-  var ISM={background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'5px 7px',color:'var(--c-text2)',fontSize:12,width:'100%',minWidth:0};
-  var TH={padding:'7px 8px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
-  var THR=Object.assign({},TH,{textAlign:'right'});
-  var TD={padding:'8px 8px',fontSize:12.5,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
-  var TDR=Object.assign({},TD,{textAlign:'right'});
-  var TDE=Object.assign({},TD,{padding:'5px 6px'});
-
-  /* Always-editable entry row (existing entries) — saves immediately on change/blur */
-  function LiveEntryRow(rp){
-    var m=rp.m, bdays=rp.bdays||0, activityId=rp.activityId;
-    var _q=useState(String(m.qty!=null?m.qty:1)),qty=_q[0],setQty=_q[1];
-    var _ft=useState(String(m.fte!=null?m.fte:1)),fteStr=_ft[0],setFteStr=_ft[1];
-    var _ftf=useState(false),ftFocused=_ftf[0],setFtFocused=_ftf[1];
-    var _ad=useState(String(m.act_hours!=null?m.act_hours:0)),adStr=_ad[0],setAdStr=_ad[1];
-    useEffect(function(){setQty(String(m.qty!=null?m.qty:1));},[m.qty]);
-    useEffect(function(){var ext=m.fte!=null?m.fte:1;if(!ftFocused&&parseFloat(fteStr)!==ext)setFteStr(String(ext));},[m.fte,ftFocused]);
-    useEffect(function(){setAdStr(String(m.act_hours!=null?m.act_hours:0));},[m.act_hours]);
-
-    var rate=rm[m.manpower_type]||0;
-    var qtyN=Math.max(1,parseInt(qty)||1);
-    var fteN=clampFte(fteStr.replace(/\.+$/,''));
-    var adN=Math.max(0,parseFloat(adStr)||0);
-    var estC=rate*bdays*fteN*qtyN, actC=rate*adN*fteN*qtyN;
-
-    function save(over){
-      var safeFteN=clampFte(fteStr.replace(/\.+$/,''));
-      onSaveEntry(Object.assign({id:m.id,manpower_type:m.manpower_type,qty:qtyN,fte:safeFteN,est_hours:bdays,act_hours:adN,projectId:project.id,activity_id:activityId},over||{}));
-    }
-    return (
-      <tr onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
-        onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-        <td style={TDE}>
-          <select value={m.manpower_type}
-            onChange={function(e){save({manpower_type:e.target.value});}}
-            style={Object.assign({},ISM,{minWidth:130})}>
-            {manpowerTypes.map(function(t){return <option key={t.id||t.name} value={t.name}>{t.name}</option>;})}
-          </select>
-        </td>
-        <td style={Object.assign({},TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/day</td>
-        <td style={TDE}>
-          <input type="number" min="1" step="1" value={qty}
-            onChange={function(e){setQty(e.target.value);}}
-            onBlur={function(){save();}}
-            style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
-        </td>
-        <td style={TDE}>
-          <input type="text" inputMode="decimal" placeholder="0–1" value={fteStr}
-            onChange={function(e){setFteStr(e.target.value);}}
-            onFocus={function(){setFtFocused(true);}}
-            onBlur={function(){setFtFocused(false);var clamped=String(clampFte(fteStr.replace(/\.+$/,'')));setFteStr(clamped);save();}}
-            style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
-        </td>
-        <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-        <td style={TDE}>
-          <input type="number" min="0" step="0.5" value={adStr}
-            onChange={function(e){setAdStr(e.target.value);}}
-            onBlur={function(){save();}}
-            placeholder="0" style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
-        </td>
-        <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-        <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
-          <button onClick={function(){onDeleteEntry(m.id);}} title="Remove role"
-            style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer',marginLeft:'auto'}}>
-            <Ico n="trash" size={11}/>
-          </button>
-        </td>
-      </tr>
-    );
-  }
-
-  /* Activity accordion row */
-  function ActivitySection(actProps){
-    var act=actProps.act;
-    var isCollapsed = !!collapsed[act.id];
-    var bdays = networkDays(act.start_date, act.end_date);
-    var ents = manpower.filter(function(m){return m.activity_id===act.id;});
-    var displayEnts = ents;
-    var actEstC=0, actActC=0;
-    ents.forEach(function(m){
-      var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
-      actEstC+=bdays*qty*fte*rate;
-      actActC+=(m.act_hours||0)*qty*fte*rate;
-    });
-    var _aName=useState(act.name),aName=_aName[0],setAName=_aName[1];
-    var _aStart=useState(dOnly(act.start_date)),aStart=_aStart[0],setAStart=_aStart[1];
-    var _aEnd=useState(dOnly(act.end_date)),aEnd=_aEnd[0],setAEnd=_aEnd[1];
-
-    return (
-      <div style={{border:'1px solid var(--c-border)',borderRadius:10,overflow:'hidden',marginBottom:10}}>
-        {/* Activity header */}
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'var(--c-bg)',borderBottom:isCollapsed?'none':'1px solid var(--c-border)'}}>
-          <button onClick={function(){setCollapsed(function(c){return Object.assign({},c,{[act.id]:!c[act.id]});})}}
-            style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:2,cursor:'pointer',flexShrink:0}}>
-            <Ico n={isCollapsed?'chevr':'chevl'} size={12}/>
-          </button>
-          <input value={aName}
-            onChange={function(e){setAName(e.target.value);}}
-            onBlur={function(e){if(e.target.value.trim()!==act.name) saveActivityField(act,'name',e.target.value.trim()||act.name);}}
-            style={{flex:1,background:'transparent',border:'none',color:'var(--c-text2)',fontSize:13,fontWeight:600,padding:'2px 4px',borderRadius:4,minWidth:120,outline:'none'}}
-            onFocus={function(e){e.target.style.background='var(--c-input)';e.target.style.border='1px solid var(--c-border2)';}}
-            onBlurCapture={function(e){e.target.style.background='transparent';e.target.style.border='none';}}
-          />
-          <input type="date" value={aStart}
-            onChange={function(e){setAStart(e.target.value);}}
-            onBlur={function(e){if(e.target.value!==dOnly(act.start_date)) saveActivityField(act,'start_date',e.target.value||null);}}
-            style={{background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'3px 6px',color:'var(--c-text3)',fontSize:11.5,colorScheme:'dark',width:116}}/>
-          <span style={{fontSize:11,color:'var(--c-text5)'}}>→</span>
-          <input type="date" value={aEnd}
-            onChange={function(e){setAEnd(e.target.value);}}
-            onBlur={function(e){if(e.target.value!==dOnly(act.end_date)) saveActivityField(act,'end_date',e.target.value||null);}}
-            style={{background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'3px 6px',color:'var(--c-text3)',fontSize:11.5,colorScheme:'dark',width:116}}/>
-          <span style={{fontSize:11.5,fontWeight:700,color:bdays>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap',minWidth:52,textAlign:'right'}}>{bdays>0?bdays+'d biz':'—'}</span>
-          <span style={{fontSize:12,fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap',minWidth:70,textAlign:'right'}}>${actEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
-          <button onClick={function(){if(window.confirm('Delete activity "'+act.name+'" and all its entries?')) onDeleteActivity(act.id);}}
-            style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer',flexShrink:0}}>
-            <Ico n="trash" size={11}/>
-          </button>
-        </div>
-
-        {/* Entry table (hidden when collapsed) */}
-        {!isCollapsed&&(
-          <div>
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',minWidth:720,tableLayout:'fixed'}}>
-                <colgroup>
-                  <col style={{width:'auto'}}/>
-                  <col style={{width:96}}/>
-                  <col style={{width:64}}/>
-                  <col style={{width:64}}/>
-                  <col style={{width:104}}/>
-                  <col style={{width:84}}/>
-                  <col style={{width:104}}/>
-                  <col style={{width:78}}/>
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th style={Object.assign({},TH,{minWidth:130})}>Type</th>
-                    <th style={THR}>Rate/day</th>
-                    <th style={THR}>Qty</th>
-                    <th style={THR}>FTE</th>
-                    <th style={THR}>Est. Cost</th>
-                    <th style={THR}>Act. Days</th>
-                    <th style={THR}>Act. Cost</th>
-                    <th style={TH}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayEnts.map(function(m){
-                    return <LiveEntryRow key={m.id} m={m} bdays={bdays} activityId={act.id}/>;
-                  })}
-                </tbody>
-                {ents.length>0&&(
-                  <tfoot>
-                    <tr style={{background:'rgba(167,139,250,.04)'}}>
-                      <td colSpan={4} style={{padding:'7px 8px',fontSize:11,fontWeight:700,color:MP_COLOR,borderTop:'1px solid rgba(167,139,250,.2)'}}>{act.name} Total</td>
-                      <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700,color:'#60A5FA',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}>${actEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                      <td style={{padding:'7px 8px',textAlign:'right',color:'#34D399',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}></td>
-                      <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700,color:'#34D399',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}>${actActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                      <td style={{borderTop:'1px solid rgba(167,139,250,.2)'}}/>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-            {/* Add Role button */}
-            <div style={{padding:'7px 10px',borderTop:'1px solid var(--c-border)'}}>
-              <button type="button"
-                onClick={function(e){
-                  e.preventDefault();
-                  onSaveEntry({manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:1,fte:1,est_hours:bdays,act_hours:0,projectId:project.id,activity_id:act.id});
-                  if(collapsed[act.id]) setCollapsed(function(c){return Object.assign({},c,{[act.id]:false});});
-                }}
-                style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',
-                  background:'rgba(167,139,250,.08)',
-                  border:'1px dashed rgba(167,139,250,.35)',
-                  borderRadius:7,color:MP_COLOR,
-                  fontSize:12,fontWeight:600,cursor:'pointer'}}>
-                <Ico n="plus" size={12}/> Add Role
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
 
@@ -1759,7 +1765,7 @@ function ManpowerTab(props) {
           </div>
         )}
         {projActivities.map(function(act){
-          return <ActivitySection key={act.id} act={act}/>;
+          return <ActivitySection key={act.id} act={act} collapsed={collapsed} setCollapsed={setCollapsed} manpower={manpower} rm={rm} manpowerTypes={manpowerTypes} projectId={project.id} onSaveEntry={onSaveEntry} onDeleteEntry={onDeleteEntry} onDeleteActivity={onDeleteActivity} saveActivityField={saveActivityField}/>;
         })}
 
         {/* Add Activity button */}
