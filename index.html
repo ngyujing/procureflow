@@ -1443,10 +1443,6 @@ function ManpowerTab(props) {
   var _collapsed=useState({}),collapsed=_collapsed[0],setCollapsed=_collapsed[1];
   var _showSaveTpl=useState(false),showSaveTpl=_showSaveTpl[0],setShowSaveTpl=_showSaveTpl[1];
   var _showApplyTpl=useState(false),showApplyTpl=_showApplyTpl[0],setShowApplyTpl=_showApplyTpl[1];
-  /* pendingEntry: {activityId, id:null|string, form} */
-  var _pe=useState(null),pendingEntry=_pe[0],setPendingEntry=_pe[1];
-  /* editingEntry: {id, activityId, form} */
-  var _ee=useState(null),editingEntry=_ee[0],setEditingEntry=_ee[1];
 
   var projActivities = useMemo(function(){
     return activities.filter(function(a){return a.projectId===project.id;}).slice().sort(function(a,b){return (a.position||0)-(b.position||0)||(a.created_at||'').localeCompare(b.created_at||'');});
@@ -1478,44 +1474,6 @@ function ManpowerTab(props) {
     });
     return Object.values(map).sort(function(a,b){return b.estC-a.estC;});
   },[projActivities, manpower, rm]);
-
-  function blankEntryForm(){return{manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:'1',fte:'1',act_days:'0'};}
-  function upd(form,k,v){return Object.assign({},form,{[k]:v});}
-  function calcEntry(form, bdays){
-    var rate=rm[form.manpower_type]||0;
-    var qty=Math.max(1,parseInt(form.qty)||1);
-    var fte=clampFte(form.fte);
-    var actDays=Math.max(0,parseFloat(form.act_days)||0);
-    return{rate:rate,qty:qty,fte:fte,actDays:actDays,estC:rate*bdays*fte*qty,actC:rate*actDays*fte*qty};
-  }
-
-  async function autoSaveEntry(form, activityId){
-    if(!form||!form.manpower_type) return;
-    var act = projActivities.find(function(a){return a.id===activityId;});
-    var bdays = act ? networkDays(act.start_date, act.end_date) : 0;
-    var c = calcEntry(form, bdays);
-    var data = {manpower_type:form.manpower_type, qty:c.qty,
-      fte:c.fte, est_hours:bdays, act_hours:c.actDays, projectId:project.id, activity_id:activityId};
-    if(pendingEntry && pendingEntry.id && pendingEntry.activityId===activityId) data.id=pendingEntry.id;
-    try {
-      var savedId = await onSaveEntry(data);
-      if(savedId && (!pendingEntry || !pendingEntry.id)){
-        setPendingEntry(function(pe){return pe?Object.assign({},pe,{id:savedId}):null;});
-      }
-    } catch(e){}
-  }
-
-  async function autoSaveEditEntry(form){
-    if(!editingEntry||!form.manpower_type) return;
-    var act = projActivities.find(function(a){return a.id===editingEntry.activityId;});
-    var bdays = act ? networkDays(act.start_date, act.end_date) : 0;
-    var c = calcEntry(form, bdays);
-    try {
-      await onSaveEntry({id:editingEntry.id, manpower_type:form.manpower_type,
-        qty:c.qty, fte:c.fte, est_hours:bdays, act_hours:c.actDays,
-        projectId:project.id, activity_id:editingEntry.activityId});
-    } catch(e){}
-  }
 
   async function saveActivityField(act, field, value){
     var updated = Object.assign({}, act, {[field]: value});
@@ -1556,53 +1514,6 @@ function ManpowerTab(props) {
   var TD={padding:'8px 8px',fontSize:12.5,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
   var TDR=Object.assign({},TD,{textAlign:'right'});
   var TDE=Object.assign({},TD,{padding:'5px 6px'});
-
-  /* Entry edit row (inside activity) */
-  function EntryRow(rowProps){
-    var form=rowProps.form, setForm=rowProps.setForm, onAutoSave=rowProps.onAutoSave, onCancel=rowProps.onCancel, isNew=rowProps.isNew, bdays=rowProps.bdays||0;
-    var c=calcEntry(form, bdays);
-    function blur(newForm){setForm(newForm);onAutoSave(newForm);}
-    return (
-      <tr style={{background:'rgba(245,158,11,.05)'}}>
-        <td style={TDE}>
-          <select autoFocus={isNew} value={form.manpower_type}
-            onChange={function(e){var f=upd(form,'manpower_type',e.target.value);setForm(f);onAutoSave(f);}}
-            style={Object.assign({},ISM,{minWidth:130})}>
-            {manpowerTypes.map(function(t){return <option key={t.id||t.name} value={t.name}>{t.name}</option>;})}
-          </select>
-        </td>
-        <td style={Object.assign({},TDE,{textAlign:'right',color:MP_COLOR,fontWeight:700,whiteSpace:'nowrap'})}>
-          ${c.rate.toLocaleString()}/day
-        </td>
-        <td style={TDE}>
-          <input type="number" min="1" step="1" value={form.qty}
-            onChange={function(e){setForm(upd(form,'qty',e.target.value));}}
-            onBlur={function(e){blur(upd(form,'qty',e.target.value));}}
-            style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
-        </td>
-        <td style={TDE}>
-          <input type="text" inputMode="decimal" placeholder="0–1" value={form.fte}
-            onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
-            onBlur={function(e){var raw=e.target.value.replace(/\.+$/,'');var f=upd(form,'fte',String(clampFte(raw)));setForm(f);onAutoSave(f);}}
-            style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
-        </td>
-        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-        <td style={TDE}>
-          <input type="number" min="0" step="0.5" value={form.act_days}
-            onChange={function(e){setForm(upd(form,'act_days',e.target.value));}}
-            onBlur={function(e){blur(upd(form,'act_days',e.target.value));}}
-            placeholder="0" style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
-        </td>
-        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#34D399',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-        <td style={Object.assign({},TDE,{whiteSpace:'nowrap'})}>
-          <button onClick={onCancel} title="Discard"
-            style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 7px',color:'var(--c-text5)',fontSize:12,display:'flex',alignItems:'center'}}>
-            <Ico n="x" size={11}/>
-          </button>
-        </td>
-      </tr>
-    );
-  }
 
   /* Always-editable entry row (existing entries) — saves immediately on change/blur */
   function LiveEntryRow(rp){
@@ -1670,11 +1581,7 @@ function ManpowerTab(props) {
     var isCollapsed = !!collapsed[act.id];
     var bdays = networkDays(act.start_date, act.end_date);
     var ents = manpower.filter(function(m){return m.activity_id===act.id;});
-    /* exclude saved pendingEntry from ents while editing */
-    var displayEnts = ents.filter(function(m){
-      if(pendingEntry && pendingEntry.id===m.id && pendingEntry.activityId===act.id) return false;
-      return true;
-    });
+    var displayEnts = ents;
     var actEstC=0, actActC=0;
     ents.forEach(function(m){
       var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
@@ -1748,15 +1655,6 @@ function ManpowerTab(props) {
                   {displayEnts.map(function(m){
                     return <LiveEntryRow key={m.id} m={m} bdays={bdays} activityId={act.id}/>;
                   })}
-                  {/* Pending new entry row */}
-                  {pendingEntry && pendingEntry.activityId===act.id && (
-                    <EntryRow
-                      form={pendingEntry.form}
-                      setForm={function(f){setPendingEntry(function(pe){return pe?Object.assign({},pe,{form:f}):null;});}}
-                      onAutoSave={function(f){autoSaveEntry(f, act.id);}}
-                      onCancel={function(){setPendingEntry(null);}}
-                      isNew={true} bdays={bdays}/>
-                  )}
                 </tbody>
                 {ents.length>0&&(
                   <tfoot>
@@ -1775,17 +1673,14 @@ function ManpowerTab(props) {
             <div style={{padding:'7px 10px',borderTop:'1px solid var(--c-border)'}}>
               <button
                 onClick={function(){
-                  if(!pendingEntry || pendingEntry.activityId!==act.id){
-                    setPendingEntry({activityId:act.id, id:null, form:blankEntryForm()});
-                    if(collapsed[act.id]) setCollapsed(function(c){return Object.assign({},c,{[act.id]:false});});
-                  }
+                  onSaveEntry({manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:1,fte:1,est_hours:bdays,act_hours:0,projectId:project.id,activity_id:act.id});
+                  if(collapsed[act.id]) setCollapsed(function(c){return Object.assign({},c,{[act.id]:false});});
                 }}
-                disabled={!!(pendingEntry && pendingEntry.activityId===act.id)}
                 style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',
-                  background:(pendingEntry&&pendingEntry.activityId===act.id)?'var(--c-bg)':'rgba(167,139,250,.08)',
-                  border:'1px dashed '+((pendingEntry&&pendingEntry.activityId===act.id)?'var(--c-border2)':'rgba(167,139,250,.35)'),
-                  borderRadius:7,color:(pendingEntry&&pendingEntry.activityId===act.id)?'var(--c-ghost)':MP_COLOR,
-                  fontSize:12,fontWeight:600,cursor:(pendingEntry&&pendingEntry.activityId===act.id)?'not-allowed':'pointer'}}>
+                  background:'rgba(167,139,250,.08)',
+                  border:'1px dashed rgba(167,139,250,.35)',
+                  borderRadius:7,color:MP_COLOR,
+                  fontSize:12,fontWeight:600,cursor:'pointer'}}>
                 <Ico n="plus" size={12}/> Add Role
               </button>
             </div>
