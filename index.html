@@ -1581,7 +1581,7 @@ function ManpowerTab(props) {
             style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={TDE}>
-          <input type="number" min="0" max="1" step="0.1" inputMode="decimal" placeholder="0–1" value={form.fte}
+          <input type="text" inputMode="decimal" placeholder="0–1" value={form.fte}
             onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
             onBlur={function(e){var f=upd(form,'fte',String(clampFte(e.target.value)));setForm(f);onAutoSave(f);}}
             style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
