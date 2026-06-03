@@ -239,7 +239,7 @@ function networkDays(s, e) {
   var fullWeeks = Math.floor(totalDays / 7);
   var rem = totalDays % 7;
   var count = fullWeeks * 5;
-  var startDow = sd.getDay();
+  var startDow = sd.getUTCDay(); // dates are parsed as UTC midnight; use UTC weekday to stay timezone-safe
   for (var i = 0; i < rem; i++) {
     var d = (startDow + i) % 7;
     if (d !== 0 && d !== 6) count++;
@@ -2697,6 +2697,7 @@ function App() {
   useEffect(function(){document.documentElement.setAttribute('data-theme',theme);},[theme]);
   useEffect(function(){try{localStorage.setItem('pf-tab',tab);}catch(e){}},[tab]);
   useEffect(function(){try{if(pid)localStorage.setItem('pf-pid',pid);else localStorage.removeItem('pf-pid');}catch(e){}},[pid]);
+  useEffect(function(){if(!dataLoading&&pid&&!projects.find(function(p){return p.id===pid;}))setPid(null);},[dataLoading,pid,projects]);
 
   /* ── Live exchange rates (free, no key required) ────────────── */
   async function fetchRates() {
@@ -3102,7 +3103,6 @@ function App() {
   if(!DEMO&&!user)return <LoginPage onLogin={setUser} theme={theme} onToggleTheme={toggleTheme}/>;
 
   var selProj=projects.find(function(p){return p.id===pid;});
-  useEffect(function(){if(!dataLoading&&pid&&!selProj)setPid(null);},[dataLoading,pid,selProj]);
   var pageTitles={dashboard:'Overview Dashboard',projects:selProj?selProj.name:'Projects',team:'Team Members',settings:'Settings'};
   var pageSubs={dashboard:'Procurement performance across all projects',projects:selProj?selProj.description:'Create and manage your procurement projects',team:'Manage user accounts and roles',settings:'Manage categories and display settings'};
   var NAV=[
