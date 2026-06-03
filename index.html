@@ -222,7 +222,7 @@ function mpRatesMap(types) {
   (types||[]).forEach(function(t){m[t.name]=t.rate_per_day||0;});
   return m;
 }
-function clampFte(v){var n=parseFloat(v);return isNaN(n)?1:Math.min(2,Math.max(0,n));}
+function clampFte(v){var n=parseFloat(v);return isNaN(n)?1:Math.min(1,Math.max(0,n));}
 function dOnly(s){if(!s)return'';if(typeof s==='string')return s.split('T')[0];return s;}
 
 function calcDays(s, e) {
@@ -1578,20 +1578,20 @@ function ManpowerTab(props) {
           <input type="number" min="1" step="1" value={form.qty}
             onChange={function(e){setForm(upd(form,'qty',e.target.value));}}
             onBlur={function(e){blur(upd(form,'qty',e.target.value));}}
-            style={Object.assign({},ISM,{width:48})}/>
+            style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={TDE}>
-          <input type="text" inputMode="decimal" placeholder="0–1" value={form.fte}
+          <input type="number" min="0" max="1" step="0.1" inputMode="decimal" placeholder="0–1" value={form.fte}
             onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
             onBlur={function(e){var f=upd(form,'fte',String(clampFte(e.target.value)));setForm(f);onAutoSave(f);}}
-            style={Object.assign({},ISM,{width:50})}/>
+            style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={TDE}>
           <input type="number" min="0" step="0.5" value={form.act_days}
             onChange={function(e){setForm(upd(form,'act_days',e.target.value));}}
             onBlur={function(e){blur(upd(form,'act_days',e.target.value));}}
-            placeholder="0" style={Object.assign({},ISM,{width:60})}/>
+            placeholder="0" style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#34D399',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={Object.assign({},TDE,{whiteSpace:'nowrap'})}>
@@ -1661,7 +1661,17 @@ function ManpowerTab(props) {
         {!isCollapsed&&(
           <div>
             <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:720,tableLayout:'fixed'}}>
+                <colgroup>
+                  <col style={{width:'auto'}}/>
+                  <col style={{width:96}}/>
+                  <col style={{width:64}}/>
+                  <col style={{width:64}}/>
+                  <col style={{width:104}}/>
+                  <col style={{width:84}}/>
+                  <col style={{width:104}}/>
+                  <col style={{width:78}}/>
+                </colgroup>
                 <thead>
                   <tr>
                     <th style={Object.assign({},TH,{minWidth:130})}>Type</th>
