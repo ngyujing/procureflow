@@ -216,22 +216,68 @@ var MANPOWER_RATES = {
 };
 var MANPOWER_TYPES = ['Project Manager','Team Lead','Project Engineer','IT Engineer','Operations Manager'];
 var MP_COLOR = '#A78BFA';
+var DEMO_MANPOWER_TYPES = [
+  {id:'mt1',name:'Project Manager',   rate:520},
+  {id:'mt2',name:'Team Lead',         rate:400},
+  {id:'mt3',name:'Project Engineer',  rate:320},
+  {id:'mt4',name:'IT Engineer',       rate:680},
+  {id:'mt5',name:'Operations Manager',rate:560},
+];
+function mpRatesMap(types) {
+  var m={};
+  (types||[]).forEach(function(t){m[t.name]=t.rate||0;});
+  return m;
+}
+function clampFte(v){var n=parseFloat(v);return isNaN(n)?1:Math.min(2,Math.max(0,n));}
+function dOnly(s){if(!s)return'';if(typeof s==='string')return s.split('T')[0];return s;}
 
 function calcDays(s, e) {
   if (!s || !e) return 0;
-  var sd = new Date(s), ed = new Date(e);
+  var sd = new Date(dOnly(s)), ed = new Date(dOnly(e));
   if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
   return Math.round((ed - sd) / 86400000) + 1;
 }
-function mpEstCostForProject(manpower, projectId) {
+function networkDays(s, e) {
+  if (!s || !e) return 0;
+  var sd = new Date(dOnly(s)), ed = new Date(dOnly(e));
+  if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
+  var totalDays = Math.round((ed - sd) / 86400000) + 1;
+  var fullWeeks = Math.floor(totalDays / 7);
+  var rem = totalDays % 7;
+  var count = fullWeeks * 5;
+  var startDow = sd.getDay();
+  for (var i = 0; i < rem; i++) {
+    var d = (startDow + i) % 7;
+    if (d !== 0 && d !== 6) count++;
+  }
+  return count;
+}
+function mpEstCostForProject(manpower, projectId, ratesMap, activities) {
+  var rm = ratesMap || {};
+  var actMap = {};
+  (activities||[]).forEach(function(a){ actMap[a.id] = networkDays(a.start_date, a.end_date); });
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.est_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
+    var days = m.activity_id ? (actMap[m.activity_id]||0) : (m.est_hours||0);
+    return s + days*(m.qty||1)*(m.fte!=null?m.fte:1)*(rm[m.manpower_type]||MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
 }
-function mpActCostForProject(manpower, projectId) {
+function mpActCostForProject(manpower, projectId, ratesMap, activities) {
+  var rm = ratesMap || {};
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.act_hours||0)*(m.qty||1)*(m.fte||1)*(MANPOWER_RATES[m.manpower_type]||0);
+    return s + (m.act_hours||0)*(m.qty||1)*(m.fte!=null?m.fte:1)*(rm[m.manpower_type]||MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
+}
+function buildEACData(projects,items,manpower,manpowerTypes,activities) {
+  var rm=mpRatesMap(manpowerTypes||DEMO_MANPOWER_TYPES);
+  return projects.map(function(p){
+    var pi=items.filter(function(i){return i.projectId===p.id;});
+    var procComm=pi.filter(function(i){return i.status==='Order'||i.status==='Received'||i.status==='Delivered';}).reduce(function(s,i){return s+(i.cost||0);},0);
+    var procRemEst=pi.filter(function(i){return i.status==='Creation';}).reduce(function(s,i){return s+(i.cost||0);},0);
+    var procEAC=procComm+procRemEst;
+    var mpEst=mpEstCostForProject(manpower,p.id,rm,activities);
+    var mpAct=mpActCostForProject(manpower,p.id,rm,activities);
+    return {project:p,procComm:procComm,procRemEst:procRemEst,procEAC:procEAC,mpEst:mpEst,mpAct:mpAct};
+  });
 }
 
 /* ── Demo data ──────────────────────────────────────────────── */
@@ -269,13 +315,20 @@ var DEMO_ITEMS = [
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_MANPOWER = [
-  {id:'mp1',projectId:'p1',description:'Project Planning & Oversight',      manpower_type:'Project Manager',   qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:1.0,est_hours:480,act_hours:120},
-  {id:'mp2',projectId:'p1',description:'Network & Systems Engineering',     manpower_type:'IT Engineer',       qty:2,start_date:'2026-06-15',end_date:'2026-08-31',fte:1.0,est_hours:320,act_hours:80},
-  {id:'mp3',projectId:'p1',description:'Team Coordination',                 manpower_type:'Team Lead',         qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:0.5,est_hours:240,act_hours:60},
-  {id:'mp4',projectId:'p3',description:'Data Centre Project Management',    manpower_type:'Project Manager',   qty:1,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:520,act_hours:0},
-  {id:'mp5',projectId:'p3',description:'Infrastructure Engineering',        manpower_type:'Project Engineer',  qty:2,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:400,act_hours:0},
-  {id:'mp6',projectId:'p3',description:'Operations Planning',               manpower_type:'Operations Manager',qty:1,start_date:'2026-07-15',end_date:'2026-09-30',fte:0.5,est_hours:200,act_hours:0},
+  {id:'mp1',projectId:'p1',activity_id:'a1',description:'Project Manager oversight',  manpower_type:'Project Manager',   qty:1,fte:1.0,est_hours:0,act_hours:30},
+  {id:'mp2',projectId:'p1',activity_id:'a1',description:'Team coordination',           manpower_type:'Team Lead',         qty:1,fte:0.5,est_hours:0,act_hours:30},
+  {id:'mp3',projectId:'p1',activity_id:'a2',description:'Network engineering',          manpower_type:'IT Engineer',       qty:2,fte:1.0,est_hours:0,act_hours:20},
+  {id:'mp4',projectId:'p3',activity_id:'a3',description:'Project management',           manpower_type:'Project Manager',   qty:1,fte:1.0,est_hours:0,act_hours:0},
+  {id:'mp5',projectId:'p3',activity_id:'a4',description:'Infrastructure engineering',   manpower_type:'Project Engineer',  qty:2,fte:1.0,est_hours:0,act_hours:0},
+  {id:'mp6',projectId:'p3',activity_id:'a4',description:'Operations planning',          manpower_type:'Operations Manager',qty:1,fte:0.5,est_hours:0,act_hours:0},
 ];
+var DEMO_ACTIVITIES = [
+  {id:'a1', projectId:'p1', name:'Project Planning & Oversight',   start_date:'2026-06-01', end_date:'2026-08-31', position:0},
+  {id:'a2', projectId:'p1', name:'Network & Systems Engineering',  start_date:'2026-06-15', end_date:'2026-08-31', position:1},
+  {id:'a3', projectId:'p3', name:'Data Centre Project Management', start_date:'2026-07-01', end_date:'2026-09-30', position:0},
+  {id:'a4', projectId:'p3', name:'Infrastructure Engineering',     start_date:'2026-07-01', end_date:'2026-09-30', position:1},
+];
+var DEMO_TEMPLATES = [];
 var DEMO_USERS = [
   {id:'u1',email:'admin@company.com',   full_name:'John Doe',     role:'Admin',   avatar_color:'#F59E0B',department:'Operations',  phone:'+1 555-0101',is_active:true, created_at:'2026-01-01'},
   {id:'u2',email:'alice@company.com',   full_name:'Alice Chen',   role:'Manager', avatar_color:'#3B82F6',department:'Procurement', phone:'+1 555-0102',is_active:true, created_at:'2026-01-15'},
