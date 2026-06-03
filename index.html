@@ -207,27 +207,29 @@ var CC = ['#F59E0B','#3B82F6','#10B981','#8B5CF6','#EF4444','#06B6D4'];
 var ROLES = ['Admin','Manager','Member','Viewer'];
 
 /* ── Manpower constants ─────────────────────────────────────── */
+var MANPOWER_RATES = {
+  'Project Manager':    520,
+  'Team Lead':          400,
+  'Project Engineer':   320,
+  'IT Engineer':        680,
+  'Operations Manager': 560,
+};
+var MANPOWER_TYPES = ['Project Manager','Team Lead','Project Engineer','IT Engineer','Operations Manager'];
 var MP_COLOR = '#A78BFA';
-/* Default types used in Demo mode and as initial state before DB loads */
 var DEMO_MANPOWER_TYPES = [
-  {id:'mt1', name:'Project Manager',    rate_per_day:520},
-  {id:'mt2', name:'Team Lead',          rate_per_day:400},
-  {id:'mt3', name:'Project Engineer',   rate_per_day:320},
-  {id:'mt4', name:'IT Engineer',        rate_per_day:680},
-  {id:'mt5', name:'Operations Manager', rate_per_day:560},
+  {id:'mt1',name:'Project Manager',   rate:520},
+  {id:'mt2',name:'Team Lead',         rate:400},
+  {id:'mt3',name:'Project Engineer',  rate:320},
+  {id:'mt4',name:'IT Engineer',       rate:680},
+  {id:'mt5',name:'Operations Manager',rate:560},
 ];
-/* Build a {name: rate} lookup map from the manpowerTypes array */
-function mpRatesMap(manpowerTypes) {
-  var m = {};
-  (manpowerTypes||[]).forEach(function(t){ m[t.name] = t.rate_per_day||0; });
+function mpRatesMap(types) {
+  var m={};
+  (types||[]).forEach(function(t){m[t.name]=t.rate||0;});
   return m;
 }
-
-/* Normalize any date value to YYYY-MM-DD for <input type="date"> + calcDays.
-   Supabase may return a full ISO timestamp which date inputs cannot display. */
-function dOnly(s){ return s ? String(s).slice(0,10) : ''; }
-/* Clamp FTE to the 0–1 range */
-function clampFte(v){ var n=parseFloat(v); if(isNaN(n))return 0; return Math.max(0,Math.min(1,n)); }
+function clampFte(v){var n=parseFloat(v);return isNaN(n)?1:Math.min(2,Math.max(0,n));}
+function dOnly(s){if(!s)return'';if(typeof s==='string')return s.split('T')[0];return s;}
 
 function calcDays(s, e) {
   if (!s || !e) return 0;
@@ -235,77 +237,54 @@ function calcDays(s, e) {
   if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
   return Math.round((ed - sd) / 86400000) + 1;
 }
-function mpEstCostForProject(manpower, projectId, ratesMap) {
+function networkDays(s, e) {
+  if (!s || !e) return 0;
+  var sd = new Date(dOnly(s)), ed = new Date(dOnly(e));
+  if (isNaN(sd)||isNaN(ed)||ed<sd) return 0;
+  var totalDays = Math.round((ed - sd) / 86400000) + 1;
+  var fullWeeks = Math.floor(totalDays / 7);
+  var rem = totalDays % 7;
+  var count = fullWeeks * 5;
+  var startDow = sd.getDay();
+  for (var i = 0; i < rem; i++) {
+    var d = (startDow + i) % 7;
+    if (d !== 0 && d !== 6) count++;
+  }
+  return count;
+}
+function mpEstCostForProject(manpower, projectId, ratesMap, activities) {
   var rm = ratesMap || {};
+  var actMap = {};
+  (activities||[]).forEach(function(a){ actMap[a.id] = networkDays(a.start_date, a.end_date); });
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.est_hours||0)*(m.qty||1)*(m.fte||1)*(rm[m.manpower_type]||0);
+    var days = m.activity_id ? (actMap[m.activity_id]||0) : (m.est_hours||0);
+    return s + days*(m.qty||1)*(m.fte!=null?m.fte:1)*(rm[m.manpower_type]||MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
 }
-function mpActCostForProject(manpower, projectId, ratesMap) {
+function mpActCostForProject(manpower, projectId, ratesMap, activities) {
   var rm = ratesMap || {};
   return manpower.filter(function(m){return m.projectId===projectId;}).reduce(function(s,m){
-    return s + (m.act_hours||0)*(m.qty||1)*(m.fte||1)*(rm[m.manpower_type]||0);
+    return s + (m.act_hours||0)*(m.qty||1)*(m.fte!=null?m.fte:1)*(rm[m.manpower_type]||MANPOWER_RATES[m.manpower_type]||0);
   }, 0);
 }
-function isCommitted(status) { return ['Order','Received','Delivered'].indexOf(status)>=0; }
-function procEstForProject(items, projectId) {
-  return items.filter(function(i){return i.projectId===projectId;}).reduce(function(s,i){return s+(i.cost||0);},0);
-}
-function procCommittedForProject(items, projectId) {
-  return items.filter(function(i){return i.projectId===projectId&&isCommitted(i.status);})
-    .reduce(function(s,i){return s+(i.act_cost!=null?i.act_cost:i.cost);},0);
-}
-function buildSCurveData(items) {
-  var allDates=items.map(function(i){return i.delivery_date||i.order_by_date;}).filter(Boolean);
-  if(!allDates.length)return[];
-  var minM=allDates.reduce(function(a,b){return a<b?a:b;}).slice(0,7);
-  var maxM=allDates.reduce(function(a,b){return a>b?a:b;}).slice(0,7);
-  var months=[],cur=new Date(minM+'-01'),end=new Date(maxM+'-01');
-  while(cur<=end){months.push(cur.toISOString().slice(0,7));cur=new Date(cur.getFullYear(),cur.getMonth()+1,1);}
-  var planByM={},actByM={};
-  items.forEach(function(i){if(i.delivery_date){var m=i.delivery_date.slice(0,7);planByM[m]=(planByM[m]||0)+(i.cost||0);}});
-  items.filter(function(i){return isCommitted(i.status)&&i.order_by_date;}).forEach(function(i){
-    var m=i.order_by_date.slice(0,7),c=i.act_cost!=null?i.act_cost:i.cost;actByM[m]=(actByM[m]||0)+c;
-  });
-  var cumP=0,cumA=0;
-  return months.map(function(m){
-    cumP+=(planByM[m]||0);cumA+=(actByM[m]||0);
-    var d=new Date(m+'-01');
-    return{label:d.toLocaleDateString('en-US',{month:'short'}),planned:cumP,actual:cumA};
-  });
-}
-function buildEACData(projects,items,manpower,manpowerTypes) {
+function buildEACData(projects,items,manpower,manpowerTypes,activities) {
   var rm=mpRatesMap(manpowerTypes||DEMO_MANPOWER_TYPES);
   return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
-    var procComm=procCommittedForProject(items,p.id);
-    var procRemEst=pi.filter(function(i){return!isCommitted(i.status);}).reduce(function(s,i){return s+(i.cost||0);},0);
+    var procComm=pi.filter(function(i){return i.status==='Order'||i.status==='Received'||i.status==='Delivered';}).reduce(function(s,i){return s+(i.cost||0);},0);
+    var procRemEst=pi.filter(function(i){return i.status==='Creation';}).reduce(function(s,i){return s+(i.cost||0);},0);
     var procEAC=procComm+procRemEst;
-    var mpEst=mpEstCostForProject(manpower,p.id,rm);
-    var mpAct=mpActCostForProject(manpower,p.id,rm);
-    var mpEAC=mpAct>0?mpAct:mpEst;
-    var totalBudget=(p.budget||0)+(p.manpower_budget||0);
-    var totalEAC=procEAC+mpEAC;
-    return{id:p.id,name:p.name,color:p.color,procBudget:p.budget||0,procComm:procComm,mpBudget:p.manpower_budget||0,mpEAC:mpEAC,totalBudget:totalBudget,totalEAC:totalEAC,variance:totalBudget-totalEAC,overrun:totalEAC>totalBudget};
+    var mpEst=mpEstCostForProject(manpower,p.id,rm,activities);
+    var mpAct=mpActCostForProject(manpower,p.id,rm,activities);
+    return {project:p,procComm:procComm,procRemEst:procRemEst,procEAC:procEAC,mpEst:mpEst,mpAct:mpAct};
   });
-}
-function buildCashFlowData(items) {
-  var byM={};
-  items.forEach(function(i){
-    if(!i.delivery_date)return;
-    var m=i.delivery_date.slice(0,7);
-    if(!byM[m])byM[m]={month:m,planned:0,committed:0};
-    byM[m].planned+=(i.cost||0);
-    if(isCommitted(i.status))byM[m].committed+=(i.act_cost!=null?i.act_cost:i.cost);
-  });
-  return Object.keys(byM).sort().map(function(m){return byM[m];});
 }
 
 /* ── Demo data ──────────────────────────────────────────────── */
 var DEMO_PROJECTS = [
-  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, manpower_budget:150000, color:'#3B82F6', currency:'USD', created_at:'2026-01-15'},
-  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  manpower_budget:0,      color:'#F59E0B', currency:'SGD', created_at:'2026-02-01'},
-  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, manpower_budget:200000, color:'#A78BFA', currency:'USD', created_at:'2026-03-10'},
+  {id:'p1',name:'IT Infrastructure Upgrade', description:'Network, servers & workstation overhaul',    budget:120000, color:'#3B82F6', currency:'USD', created_at:'2026-01-15'},
+  {id:'p2',name:'Office Renovation 2026',    description:'Furniture, fixtures and AV systems',          budget:80000,  color:'#F59E0B', currency:'SGD', created_at:'2026-02-01'},
+  {id:'p3',name:'Data Centre Expansion',     description:'Rack systems, cooling & power infrastructure',budget:250000, color:'#A78BFA', currency:'USD', created_at:'2026-03-10'},
 ];
 var DEMO_CURRENCIES = [
   {id:'c1', code:'USD', name:'US Dollar',         symbol:'$',   is_active:true},
@@ -323,26 +302,33 @@ var DEMO_CURRENCIES = [
 ];
 
 var DEMO_ITEMS = [
-  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,act_cost:27200, delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'USD',notes:'Confirm model XPS 9530 with 32GB RAM. Contact: sales@dell.com'},
-  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, act_cost:5400,  delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27',item_currency:'USD',notes:'Annual subscription. Renew before May 30.'},
-  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,act_cost:11640, delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24',item_currency:'USD',notes:'Reserved instances. Region: ap-southeast-1.'},
-  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,act_cost:null,  delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16',item_currency:'USD',notes:''},
-  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, act_cost:8200,  delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01',item_currency:'SGD',notes:'Includes 10 desks, 4 conference tables.'},
-  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,act_cost:null,  delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'SGD',notes:''},
-  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, act_cost:10200, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18',item_currency:'SGD',notes:'Model: Leap V2. Colour: Black.'},
-  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,act_cost:43500, delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20',item_currency:'USD',notes:'42U racks. Require raised floor installation.'},
-  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,act_cost:null,  delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07',item_currency:'USD',notes:''},
-  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,act_cost:null,  delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16',item_currency:'USD',notes:''},
+  {id:'i1', projectId:'p1',name:'Dell XPS Workstations',        category:'Hardware',  vendor:'Dell Technologies',   status:'Order',    qty:10,unit_cost:2800, cost:28000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'USD',notes:'Confirm model XPS 9530 with 32GB RAM. Contact: sales@dell.com'},
+  {id:'i2', projectId:'p1',name:'Adobe Creative Suite Licenses',category:'Software',  vendor:'Adobe Inc.',          status:'Delivered',qty:15,unit_cost:360,  cost:5400, delivery_date:'2026-05-30',lead_time_days:3, order_by_date:'2026-05-27',item_currency:'USD',notes:'Annual subscription. Renew before May 30.'},
+  {id:'i3', projectId:'p1',name:'Cloud Infrastructure (AWS)',   category:'Software',  vendor:'Amazon Web Services', status:'Delivered',qty:1, unit_cost:12000,cost:12000,delivery_date:'2026-05-01',lead_time_days:7, order_by_date:'2026-04-24',item_currency:'USD',notes:'Reserved instances. Region: ap-southeast-1.'},
+  {id:'i4', projectId:'p1',name:'Cisco Network Equipment',      category:'Hardware',  vendor:'Cisco Systems',       status:'Creation', qty:4, unit_cost:5500, cost:22000,delivery_date:'2026-08-15',lead_time_days:30,order_by_date:'2026-07-16',item_currency:'USD',notes:''},
+  {id:'i5', projectId:'p2',name:'Office Furniture Package',     category:'Facilities',vendor:'Herman Miller',       status:'Order',    qty:1, unit_cost:8500, cost:8500, delivery_date:'2026-07-15',lead_time_days:45,order_by_date:'2026-06-01',item_currency:'SGD',notes:'Includes 10 desks, 4 conference tables.'},
+  {id:'i6', projectId:'p2',name:'Conference AV System',         category:'Hardware',  vendor:'Crestron Electronics',status:'Creation', qty:2, unit_cost:7500, cost:15000,delivery_date:'2026-07-01',lead_time_days:21,order_by_date:'2026-06-10',item_currency:'SGD',notes:''},
+  {id:'i7', projectId:'p2',name:'Ergonomic Chairs',             category:'Facilities',vendor:'Steelcase',           status:'Received', qty:20,unit_cost:480,  cost:9600, delivery_date:'2026-06-01',lead_time_days:14,order_by_date:'2026-05-18',item_currency:'SGD',notes:'Model: Leap V2. Colour: Black.'},
+  {id:'i8', projectId:'p3',name:'Server Rack Systems',          category:'Hardware',  vendor:'Supermicro',          status:'Order',    qty:4, unit_cost:11250,cost:45000,delivery_date:'2026-08-01',lead_time_days:42,order_by_date:'2026-06-20',item_currency:'USD',notes:'42U racks. Require raised floor installation.'},
+  {id:'i9', projectId:'p3',name:'Cooling Infrastructure',       category:'Hardware',  vendor:'Schneider Electric',  status:'Creation', qty:2, unit_cost:19000,cost:38000,delivery_date:'2026-09-01',lead_time_days:56,order_by_date:'2026-07-07',item_currency:'USD',notes:''},
+  {id:'i10',projectId:'p3',name:'UPS Power Systems',            category:'Hardware',  vendor:'Eaton Corporation',   status:'Creation', qty:3, unit_cost:7333, cost:22000,delivery_date:'2026-09-15',lead_time_days:30,order_by_date:'2026-08-16',item_currency:'USD',notes:''},
 ];
 var DEMO_CATS  = ['Hardware','Software','Services','Facilities','Marketing','Legal'];
 var DEMO_MANPOWER = [
-  {id:'mp1',projectId:'p1',description:'Project Planning & Oversight',      manpower_type:'Project Manager',   qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:1.0,est_hours:92,act_hours:30},
-  {id:'mp2',projectId:'p1',description:'Network & Systems Engineering',     manpower_type:'IT Engineer',       qty:2,start_date:'2026-06-15',end_date:'2026-08-31',fte:1.0,est_hours:78,act_hours:20},
-  {id:'mp3',projectId:'p1',description:'Team Coordination',                 manpower_type:'Team Lead',         qty:1,start_date:'2026-06-01',end_date:'2026-08-31',fte:0.5,est_hours:92,act_hours:30},
-  {id:'mp4',projectId:'p3',description:'Data Centre Project Management',    manpower_type:'Project Manager',   qty:1,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:92,act_hours:0},
-  {id:'mp5',projectId:'p3',description:'Infrastructure Engineering',        manpower_type:'Project Engineer',  qty:2,start_date:'2026-07-01',end_date:'2026-09-30',fte:1.0,est_hours:92,act_hours:0},
-  {id:'mp6',projectId:'p3',description:'Operations Planning',               manpower_type:'Operations Manager',qty:1,start_date:'2026-07-15',end_date:'2026-09-30',fte:0.5,est_hours:78,act_hours:0},
+  {id:'mp1',projectId:'p1',activity_id:'a1',description:'Project Manager oversight',  manpower_type:'Project Manager',   qty:1,fte:1.0,est_hours:0,act_hours:30},
+  {id:'mp2',projectId:'p1',activity_id:'a1',description:'Team coordination',           manpower_type:'Team Lead',         qty:1,fte:0.5,est_hours:0,act_hours:30},
+  {id:'mp3',projectId:'p1',activity_id:'a2',description:'Network engineering',          manpower_type:'IT Engineer',       qty:2,fte:1.0,est_hours:0,act_hours:20},
+  {id:'mp4',projectId:'p3',activity_id:'a3',description:'Project management',           manpower_type:'Project Manager',   qty:1,fte:1.0,est_hours:0,act_hours:0},
+  {id:'mp5',projectId:'p3',activity_id:'a4',description:'Infrastructure engineering',   manpower_type:'Project Engineer',  qty:2,fte:1.0,est_hours:0,act_hours:0},
+  {id:'mp6',projectId:'p3',activity_id:'a4',description:'Operations planning',          manpower_type:'Operations Manager',qty:1,fte:0.5,est_hours:0,act_hours:0},
 ];
+var DEMO_ACTIVITIES = [
+  {id:'a1', projectId:'p1', name:'Project Planning & Oversight',   start_date:'2026-06-01', end_date:'2026-08-31', position:0},
+  {id:'a2', projectId:'p1', name:'Network & Systems Engineering',  start_date:'2026-06-15', end_date:'2026-08-31', position:1},
+  {id:'a3', projectId:'p3', name:'Data Centre Project Management', start_date:'2026-07-01', end_date:'2026-09-30', position:0},
+  {id:'a4', projectId:'p3', name:'Infrastructure Engineering',     start_date:'2026-07-01', end_date:'2026-09-30', position:1},
+];
+var DEMO_TEMPLATES = [];
 var DEMO_USERS = [
   {id:'u1',email:'admin@company.com',   full_name:'John Doe',     role:'Admin',   avatar_color:'#F59E0B',department:'Operations',  phone:'+1 555-0101',is_active:true, created_at:'2026-01-01'},
   {id:'u2',email:'alice@company.com',   full_name:'Alice Chen',   role:'Manager', avatar_color:'#3B82F6',department:'Procurement', phone:'+1 555-0102',is_active:true, created_at:'2026-01-15'},
@@ -448,9 +434,6 @@ var SVGP = {
   note:      '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
   download:  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   people:    '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-  calendar:  '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
-  chartline: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
-  coins:     '<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><line x1="16.71" y1="13.88" x2="17" y2="14"/>',
 };
 
 function Ico(props) {
@@ -484,46 +467,6 @@ function BarChart(props) {
     return <g key={'b'+i}><rect x={x} y={y} width={bW} height={bH} fill={d.color} rx="3" opacity="0.85"/><text x={x+bW/2} y={VH-PB+14} textAnchor="middle" fill="var(--c-text5)" fontSize="9.5">{lbl}</text></g>;
   });
   return <svg viewBox={'0 0 '+VW+' '+VH} style={{width:'100%',height:h}}>{gridEls}{barEls}</svg>;
-}
-
-/* ── Line chart (S-Curve) ───────────────────────────────────── */
-function LineChart(props) {
-  var data=props.data||[],height=props.height||180,currency=props.currency;
-  if(!data.length)return <div style={{height:height,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-text5)',fontSize:12}}>No data</div>;
-  var W=600,H=height,PL=60,PR=20,PT=10,PB=30,cW=W-PL-PR,cH=H-PT-PB;
-  var maxV=data.reduce(function(m,d){return Math.max(m,d.planned||0,d.actual||0);},1);
-  function xp(i){return PL+(i/Math.max(1,data.length-1))*cW;}
-  function yp(v){return PT+cH-(v/maxV)*cH;}
-  var grid=[0,0.25,0.5,0.75,1];
-  var plannedPts=data.map(function(d,i){return xp(i)+','+yp(d.planned||0);}).join(' ');
-  var actualPts=data.map(function(d,i){return xp(i)+','+yp(d.actual||0);}).join(' ');
-  var areaActual=actualPts+' '+xp(data.length-1)+','+(PT+cH)+' '+xp(0)+','+(PT+cH);
-  return (
-    <div>
-      <svg width="100%" viewBox={'0 0 '+W+' '+H} style={{display:'block'}}>
-        {grid.map(function(f){
-          var yv=PT+cH*(1-f),val=maxV*f;
-          return <g key={f}>
-            <line x1={PL} y1={yv} x2={W-PR} y2={yv} stroke="rgba(255,255,255,.04)" strokeWidth="1"/>
-            <text x={PL-5} y={yv+3.5} textAnchor="end" fill="rgba(148,163,184,.5)" fontSize="9">{val>=1000?'$'+(val/1000).toFixed(0)+'k':'$'+val.toFixed(0)}</text>
-          </g>;
-        })}
-        {data.map(function(d,i){return <text key={i} x={xp(i)} y={H-2} textAnchor="middle" fill="rgba(148,163,184,.5)" fontSize="9">{d.label}</text>;})}
-        <polygon points={areaActual} fill="rgba(52,211,153,.06)"/>
-        <polyline points={plannedPts} fill="none" stroke="#60A5FA" strokeWidth="2" strokeDasharray="5 3"/>
-        <polyline points={actualPts} fill="none" stroke="#34D399" strokeWidth="2"/>
-        {data.map(function(d,i){return <g key={i}><circle cx={xp(i)} cy={yp(d.planned||0)} r="3" fill="#60A5FA"/>{d.actual>0&&<circle cx={xp(i)} cy={yp(d.actual||0)} r="3" fill="#34D399"/>}</g>;})}
-      </svg>
-      <div style={{display:'flex',gap:18,justifyContent:'center',marginTop:6}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
-          <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#60A5FA" strokeWidth="2" strokeDasharray="5 3"/></svg> Planned
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
-          <svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="#34D399" strokeWidth="2"/></svg> Committed
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ── Pipeline dots ──────────────────────────────────────────── */
@@ -1228,7 +1171,6 @@ function ItemModal(props) {
     lead_time_days:initLead==='' ? '' : String(initLead),
     order_by_date: item ? (item.order_by_date||calcOrderBy(initDelivery,initLead)) : '',
     total_cost:    +initQty * (+initUnitCost||0),
-    act_cost:      item && item.act_cost!=null ? String(item.act_cost) : '',
     notes:         item ? (item.notes||'') : '',
   };
 
@@ -1277,7 +1219,6 @@ function ItemModal(props) {
         qty:            q,
         unit_cost:      uc,
         cost:           q * uc,
-        act_cost:       form.act_cost!==''&&!isNaN(+form.act_cost)?+form.act_cost:null,
         delivery_date:  form.delivery_date || null,
         lead_time_days: form.lead_time_days ? +form.lead_time_days : null,
         order_by_date:  ob || null,
@@ -1365,21 +1306,6 @@ function ItemModal(props) {
           )}
         </div>
 
-        {/* Actual / PO Cost */}
-        <div style={{gridColumn:'1/-1'}}>
-          <label style={LBL}>Actual / PO Amount ({CUR}) <span style={{fontSize:10,color:'var(--c-ghost)',fontWeight:400}}>— enter the real committed amount when placing order</span></label>
-          <div style={{display:'flex',gap:10,alignItems:'center'}}>
-            <input style={Object.assign({},INP,{flex:1})} type="number" min="0" step="0.01" value={form.act_cost}
-              onChange={function(e){set('act_cost',e.target.value);}} placeholder={'Defaults to est. cost ('+fmt(totalCost,CUR)+') if blank'}/>
-            {form.act_cost!==''&&!isNaN(+form.act_cost)&&(
-              <div style={{fontSize:12,color:+form.act_cost>totalCost?'#F87171':+form.act_cost<totalCost?'#34D399':'var(--c-text5)',whiteSpace:'nowrap'}}>
-                {+form.act_cost>totalCost?'▲':'▼'} {fmt(Math.abs(+form.act_cost-totalCost),CUR)} {+form.act_cost>totalCost?'over':'under'} est.
-              </div>
-            )}
-          </div>
-          <div style={{marginTop:5,fontSize:10.5,color:'var(--c-text5)'}}>Counts as committed spend once status reaches <strong>Order</strong></div>
-        </div>
-
         {/* Delivery + Lead time */}
         <div>
           <label style={LBL}>Delivery Date <span style={{color:'var(--c-ghost)',fontWeight:400}}>(optional)</span></label>
@@ -1429,129 +1355,231 @@ function ItemModal(props) {
 }
 
 
-/* ── Manpower Tab (inline line-item editor) ─────────────────── */
+/* ── Save Template Modal ────────────────────────────────────── */
+function SaveTemplateModal(props) {
+  var onSave=props.onSave, onClose=props.onClose;
+  var _n=useState(''),name=_n[0],setName=_n[1];
+  var _s=useState(false),saving=_s[0],setSaving=_s[1];
+  var _e=useState(''),err=_e[0],setErr=_e[1];
+  async function submit(){
+    if(!name.trim()){setErr('Template name is required.');return;}
+    setSaving(true);
+    await onSave(name.trim());
+    setSaving(false);
+  }
+  return (
+    <Modal title="Save as Template" onClose={onClose} w={420}
+      footer={<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
+        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="save" size={13}/>{saving?'Saving…':'Save Template'}
+        </button>
+      </div>}>
+      <div>
+        <p style={{fontSize:12.5,color:'var(--c-text4)',marginBottom:14}}>Save the current activity structure (without dates) as a reusable template.</p>
+        <label style={LBL}>Template Name</label>
+        <input style={INP} autoFocus value={name} onChange={function(e){setName(e.target.value);setErr('');}} onKeyDown={function(e){if(e.key==='Enter')submit();}} placeholder="e.g. Standard IT Project"/>
+        {err&&<div style={{marginTop:8,fontSize:12,color:'#F87171'}}>{err}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Apply Template Modal ───────────────────────────────────── */
+function ApplyTemplateModal(props) {
+  var templates=props.templates||[], onApply=props.onApply, onClose=props.onClose;
+  var _exp=useState(null),expanded=_exp[0],setExpanded=_exp[1];
+  var _s=useState(false),applying=_s[0],setApplying=_s[1];
+  return (
+    <Modal title="Apply Template" onClose={onClose} w={500}>
+      {!templates.length&&<p style={{fontSize:13,color:'var(--c-text5)',textAlign:'center',padding:'20px 0'}}>No templates saved yet. Save one from a project's Manpower tab.</p>}
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {templates.map(function(tpl){
+          var acts = tpl.manpower_template_activities || [];
+          var isExp = expanded===tpl.id;
+          return (
+            <div key={tpl.id} style={{border:'1px solid var(--c-border2)',borderRadius:9,overflow:'hidden'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--c-bg)',cursor:'pointer'}} onClick={function(){setExpanded(isExp?null:tpl.id);}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <Ico n={isExp?'chevl':'chevr'} size={12} color="var(--c-text5)"/>
+                  <span style={{fontSize:13,fontWeight:600,color:'var(--c-text2)'}}>{tpl.name}</span>
+                  <span style={{fontSize:11,color:'var(--c-text5)'}}>{acts.length} activit{acts.length!==1?'ies':'y'}</span>
+                </div>
+                <button onClick={async function(e){e.stopPropagation();setApplying(tpl.id);await onApply(tpl.id);setApplying(null);onClose();}}
+                  disabled={applying===tpl.id}
+                  style={{padding:'5px 12px',background:'rgba(245,158,11,.15)',border:'1px solid rgba(245,158,11,.3)',borderRadius:6,color:'#F59E0B',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>
+                  {applying===tpl.id?'Applying…':'Apply'}
+                </button>
+              </div>
+              {isExp&&acts.length>0&&(
+                <div style={{padding:'8px 14px 12px',borderTop:'1px solid var(--c-border)'}}>
+                  {acts.map(function(a){
+                    var entries = a.manpower_template_entries || [];
+                    return (
+                      <div key={a.id} style={{marginBottom:8}}>
+                        <div style={{fontSize:12,fontWeight:600,color:'var(--c-text3)',marginBottom:4}}>{a.name}</div>
+                        {entries.map(function(e){
+                          return <div key={e.id} style={{fontSize:11.5,color:'var(--c-text5)',paddingLeft:12,marginBottom:2}}>
+                            · {e.manpower_type} × {e.qty} (FTE {e.fte})
+                          </div>;
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Manpower Tab (activity accordion) ─────────────────────── */
 function ManpowerTab(props) {
   var project=props.project, manpower=props.manpower||[];
-  var onSave=props.onSave, onDelete=props.onDelete;
+  var activities=props.activities||[], templates=props.templates||[];
+  var onSaveEntry=props.onSave, onDeleteEntry=props.onDelete;
+  var onSaveActivity=props.onSaveActivity, onDeleteActivity=props.onDeleteActivity;
+  var onSaveTemplate=props.onSaveTemplate, onApplyTemplate=props.onApplyTemplate;
   var manpowerTypes=props.manpowerTypes||DEMO_MANPOWER_TYPES;
   var rm=useMemo(function(){return mpRatesMap(manpowerTypes);},[manpowerTypes]);
 
-  /* pendingNew: {id:null|string, form:{...}} — id is set once first saved */
-  var _pn=useState(null),pendingNew=_pn[0],setPendingNew=_pn[1];
-  var _er=useState(null),editingRow=_er[0],setEditingRow=_er[1];
+  var _collapsed=useState({}),collapsed=_collapsed[0],setCollapsed=_collapsed[1];
+  var _showSaveTpl=useState(false),showSaveTpl=_showSaveTpl[0],setShowSaveTpl=_showSaveTpl[1];
+  var _showApplyTpl=useState(false),showApplyTpl=_showApplyTpl[0],setShowApplyTpl=_showApplyTpl[1];
+  /* pendingEntry: {activityId, id:null|string, form} */
+  var _pe=useState(null),pendingEntry=_pe[0],setPendingEntry=_pe[1];
+  /* editingEntry: {id, activityId, form} */
+  var _ee=useState(null),editingEntry=_ee[0],setEditingEntry=_ee[1];
 
-  var pm=manpower.filter(function(m){return m.projectId===project.id;});
+  var projActivities = useMemo(function(){
+    return activities.filter(function(a){return a.projectId===project.id;}).slice().sort(function(a,b){return (a.position||0)-(b.position||0)||(a.created_at||'').localeCompare(b.created_at||'');});
+  },[activities, project.id]);
 
-  var grandEstD=0,grandEstC=0,grandActD=0,grandActC=0;
-  pm.forEach(function(m){
-    var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
-    var days=m.est_hours||calcDays(m.start_date,m.end_date);
-    var actDays=m.act_hours||0;
-    grandEstD+=days*qty; grandActD+=actDays*qty;
-    grandEstC+=days*qty*fte*rate; grandActC+=actDays*qty*fte*rate;
+  /* Grand totals across all activities */
+  var grandEstC=0, grandActC=0;
+  projActivities.forEach(function(act){
+    var bdays = networkDays(act.start_date, act.end_date);
+    var ents = manpower.filter(function(m){return m.activity_id===act.id;});
+    ents.forEach(function(m){
+      var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
+      grandEstC += bdays*qty*fte*rate;
+      grandActC += (m.act_hours||0)*qty*fte*rate;
+    });
   });
 
-  /* Build per-type summary (only types that have entries) */
-  var typeSummary=(function(){
+  /* Summary by role across all activities */
+  var typeSummary = useMemo(function(){
     var map={};
-    pm.forEach(function(m){
-      var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
-      var days=m.est_hours||calcDays(m.start_date,m.end_date);
-      var estC=days*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
-      if(!map[m.manpower_type]) map[m.manpower_type]={type:m.manpower_type,estC:0,actC:0};
-      map[m.manpower_type].estC+=estC; map[m.manpower_type].actC+=actC;
+    projActivities.forEach(function(act){
+      var bdays = networkDays(act.start_date, act.end_date);
+      manpower.filter(function(m){return m.activity_id===act.id;}).forEach(function(m){
+        var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
+        var estC=bdays*qty*fte*rate, actC=(m.act_hours||0)*qty*fte*rate;
+        if(!map[m.manpower_type]) map[m.manpower_type]={type:m.manpower_type,estC:0,actC:0};
+        map[m.manpower_type].estC+=estC; map[m.manpower_type].actC+=actC;
+      });
     });
     return Object.values(map).sort(function(a,b){return b.estC-a.estC;});
-  })();
+  },[projActivities, manpower, rm]);
 
-  function blankForm(){return{description:'',manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:'1',start_date:'',end_date:'',fte:'1',act_days:'0'};}
+  function blankEntryForm(){return{description:'',manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:'1',fte:'1',act_days:'0'};}
   function upd(form,k,v){return Object.assign({},form,{[k]:v});}
-  function calc(form){
+  function calcEntry(form, bdays){
     var rate=rm[form.manpower_type]||0;
     var qty=Math.max(1,parseInt(form.qty)||1);
-    var days=calcDays(form.start_date,form.end_date);
-    var actDays=Math.max(0,parseFloat(form.act_days)||0);
     var fte=clampFte(form.fte);
-    return{rate:rate,qty:qty,days:days,actDays:actDays,fte:fte,
-           estC:rate*days*fte*qty, actC:rate*actDays*fte*qty};
+    var actDays=Math.max(0,parseFloat(form.act_days)||0);
+    return{rate:rate,qty:qty,fte:fte,actDays:actDays,estC:rate*bdays*fte*qty,actC:rate*actDays*fte*qty};
   }
 
-  /* Auto-save for new row: called on blur of any field.
-     First call (no id yet) creates the row; subsequent calls update it. */
-  async function autoSaveNew(form){
+  async function autoSaveEntry(form, activityId){
     if(!form||!form.description.trim()) return;
-    var c=calc(form);
-    var data={description:form.description.trim(),manpower_type:form.manpower_type,qty:c.qty,
-      start_date:dOnly(form.start_date)||null,end_date:dOnly(form.end_date)||null,
-      fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:project.id};
-    /* if already saved once, update instead of insert */
-    if(pendingNew&&pendingNew.id) data.id=pendingNew.id;
+    var act = projActivities.find(function(a){return a.id===activityId;});
+    var bdays = act ? networkDays(act.start_date, act.end_date) : 0;
+    var c = calcEntry(form, bdays);
+    var data = {description:form.description.trim(), manpower_type:form.manpower_type, qty:c.qty,
+      fte:c.fte, est_hours:bdays, act_hours:c.actDays, projectId:project.id, activity_id:activityId};
+    if(pendingEntry && pendingEntry.id && pendingEntry.activityId===activityId) data.id=pendingEntry.id;
     try {
-      var savedId=await onSave(data);
-      /* capture the id so subsequent blurs are updates */
-      if(savedId&&(!pendingNew||!pendingNew.id)){
-        setPendingNew(function(pn){return pn?Object.assign({},pn,{id:savedId}):null;});
+      var savedId = await onSaveEntry(data);
+      if(savedId && (!pendingEntry || !pendingEntry.id)){
+        setPendingEntry(function(pe){return pe?Object.assign({},pe,{id:savedId}):null;});
       }
-    } catch(e){ /* toast shown by saveManpower */ }
+    } catch(e){}
   }
 
-  /* Auto-save for existing row being edited */
-  async function autoSaveEdit(form){
-    if(!editingRow||!form.description.trim()) return;
-    var c=calc(form);
+  async function autoSaveEditEntry(form){
+    if(!editingEntry||!form.description.trim()) return;
+    var act = projActivities.find(function(a){return a.id===editingEntry.activityId;});
+    var bdays = act ? networkDays(act.start_date, act.end_date) : 0;
+    var c = calcEntry(form, bdays);
     try {
-      await onSave({id:editingRow.id,description:form.description.trim(),manpower_type:form.manpower_type,
-        qty:c.qty,start_date:dOnly(form.start_date)||null,end_date:dOnly(form.end_date)||null,
-        fte:c.fte,est_hours:c.days,act_hours:c.actDays,projectId:editingRow.projectId});
-    } catch(e){ /* toast shown by saveManpower */ }
+      await onSaveEntry({id:editingEntry.id, description:form.description.trim(), manpower_type:form.manpower_type,
+        qty:c.qty, fte:c.fte, est_hours:bdays, act_hours:c.actDays,
+        projectId:project.id, activity_id:editingEntry.activityId});
+    } catch(e){}
+  }
+
+  async function saveActivityField(act, field, value){
+    var updated = Object.assign({}, act, {[field]: value});
+    await onSaveActivity(updated);
   }
 
   function exportExcel(){
     if(!window.XLSX){alert('Excel library not loaded.');return;}
     var XLSX=window.XLSX;
-    var cols=['Description of Work','Manpower Type','Rate/day (USD)','Qty','Start Date','End Date','Est. Days','FTE',
-              'Est. Cost (USD)','Act. Days','Act. Cost (USD)'];
-    var rows=[cols];
-    pm.forEach(function(m){
-      var rate=rm[m.manpower_type]||0,qty=m.qty||1,days=m.est_hours||calcDays(m.start_date,m.end_date);
-      var fte=m.fte!=null?m.fte:1,actDays=m.act_hours||0;
-      rows.push([m.description||'',m.manpower_type,rate,qty,dOnly(m.start_date),dOnly(m.end_date),days,fte,
-                 rate*days*fte*qty, actDays, rate*actDays*fte*qty]);
+    var header=['No.','Activity','Start','End','Biz Days','Manpower Type','Qty','Rate/day','FTE','Est. Cost','Act. Days','Act. Cost'];
+    var rows=[header];
+    projActivities.forEach(function(act, ai){
+      var bdays=networkDays(act.start_date, act.end_date);
+      var ents=manpower.filter(function(m){return m.activity_id===act.id;});
+      if(!ents.length){
+        rows.push([ai+1, act.name, dOnly(act.start_date), dOnly(act.end_date), bdays, '','','','','','','']);
+      } else {
+        ents.forEach(function(m, mi){
+          var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1, actDays=m.act_hours||0;
+          rows.push([mi===0?ai+1:'', mi===0?act.name:'', mi===0?dOnly(act.start_date):'', mi===0?dOnly(act.end_date):'', mi===0?bdays:'',
+            m.manpower_type, qty, rate, fte, rate*bdays*fte*qty, actDays, rate*actDays*fte*qty]);
+        });
+      }
     });
     rows.push([]);
-    rows.push(['GRAND TOTAL','','','','','','','',grandEstC,'',grandActC]);
-    if(project.manpower_budget>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','',project.manpower_budget,'','']);
+    rows.push(['','GRAND TOTAL','','','','','','','',grandEstC,'',grandActC]);
+    if(project.manpower_budget>0) rows.push(['','BUDGET','','','','','','','',project.manpower_budget,'','']);
     var ws=XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols']=[{wch:34},{wch:20},{wch:14},{wch:6},{wch:12},{wch:12},{wch:9},{wch:6},{wch:16},{wch:10},{wch:16}];
+    ws['!cols']=[{wch:5},{wch:32},{wch:12},{wch:12},{wch:9},{wch:20},{wch:6},{wch:10},{wch:6},{wch:14},{wch:10},{wch:14}];
     var wb=XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb,ws,'Manpower Plan');
     XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
   }
 
   var ISM={background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'5px 7px',color:'var(--c-text2)',fontSize:12,width:'100%',minWidth:0};
-  var TH={padding:'8px 10px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
+  var TH={padding:'7px 8px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
   var THR=Object.assign({},TH,{textAlign:'right'});
-  var TD={padding:'9px 10px',fontSize:12.5,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
+  var TD={padding:'8px 8px',fontSize:12.5,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
   var TDR=Object.assign({},TD,{textAlign:'right'});
-  var TDE=Object.assign({},TD,{padding:'6px 8px'});
+  var TDE=Object.assign({},TD,{padding:'5px 6px'});
 
-  /* Inline edit row — no Save button; auto-saves on every field blur */
-  function EditRow(rowProps){
-    var form=rowProps.form,setForm=rowProps.setForm,onAutoSave=rowProps.onAutoSave,onCancel=rowProps.onCancel,isNew=rowProps.isNew;
-    var c=calc(form);
-    function blur(newForm){ setForm(newForm); onAutoSave(newForm); }
+  /* Entry edit row (inside activity) */
+  function EntryRow(rowProps){
+    var form=rowProps.form, setForm=rowProps.setForm, onAutoSave=rowProps.onAutoSave, onCancel=rowProps.onCancel, isNew=rowProps.isNew, bdays=rowProps.bdays||0;
+    var c=calcEntry(form, bdays);
+    function blur(newForm){setForm(newForm);onAutoSave(newForm);}
     return (
       <tr style={{background:'rgba(245,158,11,.05)'}}>
         <td style={TDE}>
           <input autoFocus={isNew} value={form.description}
             onChange={function(e){setForm(upd(form,'description',e.target.value));}}
             onBlur={function(e){blur(upd(form,'description',e.target.value));}}
-            placeholder="Description of work…" style={Object.assign({},ISM,{minWidth:160})}/>
+            placeholder="Role description…" style={Object.assign({},ISM,{minWidth:140})}/>
         </td>
         <td style={TDE}>
           <select value={form.manpower_type}
             onChange={function(e){var f=upd(form,'manpower_type',e.target.value);setForm(f);onAutoSave(f);}}
-            style={Object.assign({},ISM,{minWidth:150})}>
+            style={Object.assign({},ISM,{minWidth:130})}>
             {manpowerTypes.map(function(t){return <option key={t.id||t.name} value={t.name}>{t.name}</option>;})}
           </select>
         </td>
@@ -1562,43 +1590,190 @@ function ManpowerTab(props) {
           <input type="number" min="1" step="1" value={form.qty}
             onChange={function(e){setForm(upd(form,'qty',e.target.value));}}
             onBlur={function(e){blur(upd(form,'qty',e.target.value));}}
-            style={Object.assign({},ISM,{width:50})}/>
+            style={Object.assign({},ISM,{width:48})}/>
         </td>
-        <td style={TDE}>
-          <input type="date" value={dOnly(form.start_date)}
-            onChange={function(e){setForm(upd(form,'start_date',e.target.value));}}
-            onBlur={function(e){blur(upd(form,'start_date',e.target.value));}}
-            style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/>
-        </td>
-        <td style={TDE}>
-          <input type="date" min={dOnly(form.start_date)||undefined} value={dOnly(form.end_date)}
-            onChange={function(e){setForm(upd(form,'end_date',e.target.value));}}
-            onBlur={function(e){blur(upd(form,'end_date',e.target.value));}}
-            style={Object.assign({},ISM,{colorScheme:'dark',minWidth:120})}/>
-        </td>
-        <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:600,color:c.days>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap'})}>{c.days>0?c.days+'d':'—'}</td>
         <td style={TDE}>
           <input type="text" inputMode="decimal" placeholder="0–1" value={form.fte}
             onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
             onBlur={function(e){var f=upd(form,'fte',String(clampFte(e.target.value)));setForm(f);onAutoSave(f);}}
-            style={Object.assign({},ISM,{width:54})}/>
+            style={Object.assign({},ISM,{width:50})}/>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={TDE}>
           <input type="number" min="0" step="0.5" value={form.act_days}
             onChange={function(e){setForm(upd(form,'act_days',e.target.value));}}
             onBlur={function(e){blur(upd(form,'act_days',e.target.value));}}
-            placeholder="0" style={Object.assign({},ISM,{width:64})}/>
+            placeholder="0" style={Object.assign({},ISM,{width:60})}/>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#34D399',whiteSpace:'nowrap'})}>${c.actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
         <td style={Object.assign({},TDE,{whiteSpace:'nowrap'})}>
-          <button onClick={onCancel}
-            title="Discard / close"
-            style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 8px',color:'var(--c-text5)',fontSize:12,display:'flex',alignItems:'center'}}>
+          <button onClick={onCancel} title="Discard"
+            style={{background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 7px',color:'var(--c-text5)',fontSize:12,display:'flex',alignItems:'center'}}>
             <Ico n="x" size={11}/>
           </button>
         </td>
       </tr>
+    );
+  }
+
+  /* Activity accordion row */
+  function ActivitySection(actProps){
+    var act=actProps.act;
+    var isCollapsed = !!collapsed[act.id];
+    var bdays = networkDays(act.start_date, act.end_date);
+    var ents = manpower.filter(function(m){return m.activity_id===act.id;});
+    /* exclude saved pendingEntry from ents while editing */
+    var displayEnts = ents.filter(function(m){
+      if(pendingEntry && pendingEntry.id===m.id && pendingEntry.activityId===act.id) return false;
+      return true;
+    });
+    var actEstC=0, actActC=0;
+    ents.forEach(function(m){
+      var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
+      actEstC+=bdays*qty*fte*rate;
+      actActC+=(m.act_hours||0)*qty*fte*rate;
+    });
+    var _aName=useState(act.name),aName=_aName[0],setAName=_aName[1];
+    var _aStart=useState(dOnly(act.start_date)),aStart=_aStart[0],setAStart=_aStart[1];
+    var _aEnd=useState(dOnly(act.end_date)),aEnd=_aEnd[0],setAEnd=_aEnd[1];
+
+    return (
+      <div style={{border:'1px solid var(--c-border)',borderRadius:10,overflow:'hidden',marginBottom:10}}>
+        {/* Activity header */}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',background:'var(--c-bg)',borderBottom:isCollapsed?'none':'1px solid var(--c-border)'}}>
+          <button onClick={function(){setCollapsed(function(c){return Object.assign({},c,{[act.id]:!c[act.id]});})}}
+            style={{background:'none',border:'none',color:'var(--c-text5)',display:'flex',padding:2,cursor:'pointer',flexShrink:0}}>
+            <Ico n={isCollapsed?'chevr':'chevl'} size={12}/>
+          </button>
+          <input value={aName}
+            onChange={function(e){setAName(e.target.value);}}
+            onBlur={function(e){if(e.target.value.trim()!==act.name) saveActivityField(act,'name',e.target.value.trim()||act.name);}}
+            style={{flex:1,background:'transparent',border:'none',color:'var(--c-text2)',fontSize:13,fontWeight:600,padding:'2px 4px',borderRadius:4,minWidth:120,outline:'none'}}
+            onFocus={function(e){e.target.style.background='var(--c-input)';e.target.style.border='1px solid var(--c-border2)';}}
+            onBlurCapture={function(e){e.target.style.background='transparent';e.target.style.border='none';}}
+          />
+          <input type="date" value={aStart}
+            onChange={function(e){setAStart(e.target.value);}}
+            onBlur={function(e){if(e.target.value!==dOnly(act.start_date)) saveActivityField(act,'start_date',e.target.value||null);}}
+            style={{background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'3px 6px',color:'var(--c-text3)',fontSize:11.5,colorScheme:'dark',width:116}}/>
+          <span style={{fontSize:11,color:'var(--c-text5)'}}>→</span>
+          <input type="date" value={aEnd}
+            onChange={function(e){setAEnd(e.target.value);}}
+            onBlur={function(e){if(e.target.value!==dOnly(act.end_date)) saveActivityField(act,'end_date',e.target.value||null);}}
+            style={{background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'3px 6px',color:'var(--c-text3)',fontSize:11.5,colorScheme:'dark',width:116}}/>
+          <span style={{fontSize:11.5,fontWeight:700,color:bdays>0?'#60A5FA':'var(--c-ghost)',whiteSpace:'nowrap',minWidth:52,textAlign:'right'}}>{bdays>0?bdays+'d biz':'—'}</span>
+          <span style={{fontSize:12,fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap',minWidth:70,textAlign:'right'}}>${actEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</span>
+          <button onClick={function(){if(window.confirm('Delete activity "'+act.name+'" and all its entries?')) onDeleteActivity(act.id);}}
+            style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer',flexShrink:0}}>
+            <Ico n="trash" size={11}/>
+          </button>
+        </div>
+
+        {/* Entry table (hidden when collapsed) */}
+        {!isCollapsed&&(
+          <div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',minWidth:700}}>
+                <thead>
+                  <tr>
+                    <th style={Object.assign({},TH,{minWidth:140})}>Description</th>
+                    <th style={Object.assign({},TH,{minWidth:130})}>Type</th>
+                    <th style={THR}>Rate/day</th>
+                    <th style={THR}>Qty</th>
+                    <th style={THR}>FTE</th>
+                    <th style={THR}>Est. Cost</th>
+                    <th style={THR}>Act. Days</th>
+                    <th style={THR}>Act. Cost</th>
+                    <th style={TH}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayEnts.map(function(m){
+                    if(editingEntry && editingEntry.id===m.id){
+                      return <EntryRow key={m.id}
+                        form={editingEntry.form}
+                        setForm={function(f){setEditingEntry(function(ee){return ee?Object.assign({},ee,{form:f}):null;});}}
+                        onAutoSave={autoSaveEditEntry}
+                        onCancel={function(){setEditingEntry(null);}}
+                        isNew={false} bdays={bdays}/>;
+                    }
+                    var rate=rm[m.manpower_type]||0, qty=m.qty||1, fte=m.fte!=null?m.fte:1;
+                    var estC=rate*bdays*fte*qty, actC=rate*(m.act_hours||0)*fte*qty;
+                    return (
+                      <tr key={m.id}
+                        onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
+                        onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
+                        <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
+                        <td style={TD}>
+                          <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:999,fontSize:11,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
+                            {m.manpower_type}
+                          </span>
+                        </td>
+                        <td style={Object.assign({},TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/day</td>
+                        <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
+                        <td style={TDR}>{fte.toFixed(1)}</td>
+                        <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                        <td style={Object.assign({},TDR,{color:'#34D399'})}>{(m.act_hours||0).toLocaleString()}</td>
+                        <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                        <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
+                          <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+                            <button onClick={function(){setEditingEntry({id:m.id,activityId:act.id,form:{description:m.description||'',manpower_type:m.manpower_type,qty:String(m.qty||1),fte:String(m.fte!=null?m.fte:1),act_days:String(m.act_hours||0)}});}}
+                              style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'4px 7px',color:'#60A5FA',display:'flex',cursor:'pointer'}}>
+                              <Ico n="edit" size={11}/>
+                            </button>
+                            <button onClick={function(){onDeleteEntry(m.id);}}
+                              style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer'}}>
+                              <Ico n="trash" size={11}/>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Pending new entry row */}
+                  {pendingEntry && pendingEntry.activityId===act.id && (
+                    <EntryRow
+                      form={pendingEntry.form}
+                      setForm={function(f){setPendingEntry(function(pe){return pe?Object.assign({},pe,{form:f}):null;});}}
+                      onAutoSave={function(f){autoSaveEntry(f, act.id);}}
+                      onCancel={function(){setPendingEntry(null);}}
+                      isNew={true} bdays={bdays}/>
+                  )}
+                </tbody>
+                {ents.length>0&&(
+                  <tfoot>
+                    <tr style={{background:'rgba(167,139,250,.04)'}}>
+                      <td colSpan={5} style={{padding:'7px 8px',fontSize:11,fontWeight:700,color:MP_COLOR,borderTop:'1px solid rgba(167,139,250,.2)'}}>{act.name} Total</td>
+                      <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700,color:'#60A5FA',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}>${actEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                      <td style={{padding:'7px 8px',textAlign:'right',color:'#34D399',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}></td>
+                      <td style={{padding:'7px 8px',textAlign:'right',fontWeight:700,color:'#34D399',fontSize:12,borderTop:'1px solid rgba(167,139,250,.2)'}}>${actActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                      <td style={{borderTop:'1px solid rgba(167,139,250,.2)'}}/>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+            {/* Add Role button */}
+            <div style={{padding:'7px 10px',borderTop:'1px solid var(--c-border)'}}>
+              <button
+                onClick={function(){
+                  if(!pendingEntry || pendingEntry.activityId!==act.id){
+                    setPendingEntry({activityId:act.id, id:null, form:blankEntryForm()});
+                    if(collapsed[act.id]) setCollapsed(function(c){return Object.assign({},c,{[act.id]:false});});
+                  }
+                }}
+                disabled={!!(pendingEntry && pendingEntry.activityId===act.id)}
+                style={{display:'flex',alignItems:'center',gap:5,padding:'5px 11px',
+                  background:(pendingEntry&&pendingEntry.activityId===act.id)?'var(--c-bg)':'rgba(167,139,250,.08)',
+                  border:'1px dashed '+((pendingEntry&&pendingEntry.activityId===act.id)?'var(--c-border2)':'rgba(167,139,250,.35)'),
+                  borderRadius:7,color:(pendingEntry&&pendingEntry.activityId===act.id)?'var(--c-ghost)':MP_COLOR,
+                  fontSize:12,fontWeight:600,cursor:(pendingEntry&&pendingEntry.activityId===act.id)?'not-allowed':'pointer'}}>
+                <Ico n="plus" size={12}/> Add Role
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -1614,14 +1789,22 @@ function ManpowerTab(props) {
           <div>
             <span style={{fontSize:13,fontWeight:700,color:'var(--c-text1)'}}>Manpower Plan</span>
             <span style={{fontSize:11,color:'var(--c-text5)',marginLeft:10}}>
-              {pm.length} line{pm.length!==1?'s':''}
+              {projActivities.length} activit{projActivities.length!==1?'ies':'y'}
               {project.manpower_budget>0&&<span> · Budget <strong style={{color:MP_COLOR}}>${project.manpower_budget.toLocaleString('en-US',{maximumFractionDigits:0})}</strong></span>}
               &nbsp;· Est <strong style={{color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
               &nbsp;· Act <strong style={{color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
             </span>
           </div>
         </div>
-        <div style={{display:'flex',gap:7}}>
+        <div style={{display:'flex',gap:7,flexWrap:'wrap'}}>
+          <button onClick={function(){setShowApplyTpl(true);}}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 11px',background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.25)',borderRadius:7,color:'#60A5FA',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            <Ico n="copy" size={12}/> Apply Template
+          </button>
+          <button onClick={function(){setShowSaveTpl(true);}}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 11px',background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.25)',borderRadius:7,color:MP_COLOR,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            <Ico n="save" size={12}/> Save as Template
+          </button>
           <button onClick={exportExcel}
             style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'rgba(52,211,153,.1)',border:'1px solid rgba(52,211,153,.25)',borderRadius:7,color:'#34D399',fontSize:12,fontWeight:600,cursor:'pointer'}}>
             <Ico n="download" size={12}/> Export Excel
@@ -1651,114 +1834,43 @@ function ManpowerTab(props) {
         </div>;
       })()}
 
-      {/* Main line-items table */}
-      <div style={{overflowX:'auto'}}>
-        <table style={{width:'100%',borderCollapse:'collapse',minWidth:1060}}>
-          <thead>
-            <tr>
-              <th style={Object.assign({},TH,{minWidth:180})}>Description of Work</th>
-              <th style={Object.assign({},TH,{minWidth:150})}>Type</th>
-              <th style={THR}>Rate/day</th>
-              <th style={THR}>Qty</th>
-              <th style={TH}>Start Date</th>
-              <th style={TH}>End Date</th>
-              <th style={THR}>Days</th>
-              <th style={THR}>FTE</th>
-              <th style={THR}>Est. Cost</th>
-              <th style={THR}>Act. Days</th>
-              <th style={THR}>Act. Cost</th>
-              <th style={TH}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pm.map(function(m){
-              /* hide the display row while pendingNew is still open for it */
-              if(pendingNew&&pendingNew.id===m.id) return null;
-              if(editingRow&&editingRow.id===m.id){
-                return <EditRow key={m.id}
-                  form={editingRow.form}
-                  setForm={function(f){setEditingRow({id:m.id,projectId:m.projectId,form:f});}}
-                  onAutoSave={autoSaveEdit}
-                  onCancel={function(){setEditingRow(null);}}
-                  isNew={false}/>;
-              }
-              var rate=rm[m.manpower_type]||0,qty=m.qty||1,fte=m.fte!=null?m.fte:1;
-              var days=m.est_hours||calcDays(m.start_date,m.end_date);
-              var actDays=m.act_hours||0;
-              var estC=rate*days*fte*qty, actC=rate*actDays*fte*qty;
-              return (
-                <tr key={m.id}
-                  onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
-                  onMouseLeave={function(e){e.currentTarget.style.background='transparent';}}>
-                  <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
-                  <td style={TD}>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 9px',borderRadius:999,fontSize:11,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
-                      {m.manpower_type}
-                    </span>
-                  </td>
-                  <td style={Object.assign({},TDR,{color:MP_COLOR,fontWeight:600,whiteSpace:'nowrap'})}>${rate.toLocaleString()}/day</td>
-                  <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
-                  <td style={TD}>{dOnly(m.start_date)||'—'}</td>
-                  <td style={TD}>{dOnly(m.end_date)||'—'}</td>
-                  <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days?days+'d':'—'}</td>
-                  <td style={TDR}>{fte.toFixed(1)}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                  <td style={Object.assign({},TDR,{color:'#34D399'})}>{actDays.toLocaleString()}</td>
-                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>${actC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                  <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
-                    <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
-                      <button onClick={function(){setEditingRow({id:m.id,projectId:m.projectId,form:{description:m.description||'',manpower_type:m.manpower_type,qty:String(m.qty||1),start_date:dOnly(m.start_date),end_date:dOnly(m.end_date),fte:String(m.fte!=null?m.fte:1),act_days:String(m.act_hours||0)}});}}
-                        style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'4px 7px',color:'#60A5FA',display:'flex',cursor:'pointer'}}>
-                        <Ico n="edit" size={11}/>
-                      </button>
-                      <button onClick={function(){onDelete(m.id);}}
-                        style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 7px',color:'#F87171',display:'flex',cursor:'pointer'}}>
-                        <Ico n="trash" size={11}/>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+      {/* Activity list */}
+      <div style={{padding:'12px 14px'}}>
+        {!projActivities.length&&(
+          <div style={{textAlign:'center',padding:'32px 20px',color:'var(--c-text5)',fontSize:13,border:'1px dashed var(--c-border2)',borderRadius:10}}>
+            No activities yet. Click <strong style={{color:'#F59E0B'}}>+ Add Activity</strong> to start planning.
+          </div>
+        )}
+        {projActivities.map(function(act){
+          return <ActivitySection key={act.id} act={act}/>;
+        })}
 
-            {/* New pending row */}
-            {pendingNew&&<EditRow
-              form={pendingNew.form}
-              setForm={function(f){setPendingNew(function(pn){return pn?Object.assign({},pn,{form:f}):null;});}}
-              onAutoSave={autoSaveNew}
-              onCancel={function(){setPendingNew(null);}}
-              isNew={true}/>}
-          </tbody>
-
-          {/* Grand total footer */}
-          {pm.length>0&&(
-            <tfoot>
-              <tr style={{background:'rgba(245,158,11,.05)'}}>
-                <td colSpan={8} style={{padding:'9px 10px',fontSize:12,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.4px',borderTop:'2px solid rgba(245,158,11,.25)'}}>
-                  Grand Total {project.manpower_budget>0&&<span style={{fontWeight:600,textTransform:'none',color:grandEstC>project.manpower_budget?'#F87171':'#34D399',marginLeft:8}}>{grandEstC>project.manpower_budget?'▲ over':'▼ under'} budget by ${Math.abs(grandEstC-project.manpower_budget).toLocaleString('en-US',{maximumFractionDigits:0})}</span>}
-                </td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>{grandActD.toLocaleString()}</td>
-                <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.25)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
-                <td style={{borderTop:'2px solid rgba(245,158,11,.25)'}}/>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
-
-      {/* Add Line button */}
-      <div style={{padding:'10px 14px',borderTop:'1px solid var(--c-border)'}}>
-        <button onClick={function(){if(!pendingNew){setPendingNew({id:null,form:blankForm()});}}}
-          disabled={!!pendingNew}
-          style={{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',background:pendingNew?'var(--c-bg)':'rgba(245,158,11,.1)',border:'1px dashed '+(pendingNew?'var(--c-border2)':'rgba(245,158,11,.4)'),borderRadius:8,color:pendingNew?'var(--c-ghost)':'#F59E0B',fontSize:12.5,fontWeight:600,cursor:pendingNew?'not-allowed':'pointer',transition:'all .15s'}}>
-          <Ico n="plus" size={13}/> Add Line
+        {/* Add Activity button */}
+        <button onClick={function(){
+          onSaveActivity({projectId:project.id, name:'New Activity', start_date:null, end_date:null, position:projActivities.length});
+        }}
+          style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'rgba(245,158,11,.08)',border:'1px dashed rgba(245,158,11,.4)',borderRadius:8,color:'#F59E0B',fontSize:12.5,fontWeight:600,cursor:'pointer',width:'100%',justifyContent:'center',marginTop:4}}>
+          <Ico n="plus" size={13}/> Add Activity
         </button>
       </div>
 
-      {/* Per-type summary table */}
+      {/* Grand total */}
+      {projActivities.length>0&&(
+        <div style={{padding:'10px 16px',borderTop:'2px solid rgba(245,158,11,.25)',background:'rgba(245,158,11,.04)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+          <span style={{fontSize:12,fontWeight:700,color:'#F59E0B',textTransform:'uppercase',letterSpacing:'.4px'}}>
+            Grand Total
+            {project.manpower_budget>0&&<span style={{fontWeight:600,textTransform:'none',color:grandEstC>project.manpower_budget?'#F87171':'#34D399',marginLeft:8}}>{grandEstC>project.manpower_budget?'▲ over':'▼ under'} budget by ${Math.abs(grandEstC-project.manpower_budget).toLocaleString('en-US',{maximumFractionDigits:0})}</span>}
+          </span>
+          <div style={{display:'flex',gap:20}}>
+            <div style={{textAlign:'right'}}><div style={{fontSize:10,color:'var(--c-text5)'}}>Est. Cost</div><div style={{fontSize:15,fontWeight:700,color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</div></div>
+            <div style={{textAlign:'right'}}><div style={{fontSize:10,color:'var(--c-text5)'}}>Act. Cost</div><div style={{fontSize:15,fontWeight:700,color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</div></div>
+          </div>
+        </div>
+      )}
+
+      {/* Summary by Role */}
       {typeSummary.length>0&&(
-        <div style={{borderTop:'2px solid var(--c-border)',padding:'14px 16px'}}>
+        <div style={{borderTop:'1px solid var(--c-border)',padding:'14px 16px'}}>
           <div style={{fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.6px',marginBottom:10}}>Summary by Role</div>
           <table style={{width:'100%',borderCollapse:'collapse',maxWidth:520}}>
             <thead>
@@ -1769,7 +1881,7 @@ function ManpowerTab(props) {
               </tr>
             </thead>
             <tbody>
-              {typeSummary.map(function(row,idx){
+              {typeSummary.map(function(row){
                 return (
                   <tr key={row.type} style={{borderTop:'1px solid var(--c-border)'}}>
                     <td style={{padding:'7px 10px',fontSize:12.5}}>
@@ -1791,6 +1903,341 @@ function ManpowerTab(props) {
           </table>
         </div>
       )}
+
+      {showSaveTpl&&<SaveTemplateModal onSave={async function(name){await onSaveTemplate(name,project.id);setShowSaveTpl(false);}} onClose={function(){setShowSaveTpl(false);}}/>}
+      {showApplyTpl&&<ApplyTemplateModal templates={templates} onApply={async function(tplId){await onApplyTemplate(tplId,project.id);}} onClose={function(){setShowApplyTpl(false);}}/>}
+    </div>
+  );
+}
+
+/* ── Manpower Modal ─────────────────────────────────────────── */
+function ManpowerModal(props) {
+  var entry=props.entry, projectId=props.projectId, onSave=props.onSave, onClose=props.onClose;
+  var def={
+    description: entry?entry.description||'':'',
+    manpower_type: entry?entry.manpower_type||MANPOWER_TYPES[0]:MANPOWER_TYPES[0],
+    qty: entry?String(entry.qty||1):'1',
+    start_date: entry?entry.start_date||'':'',
+    end_date: entry?entry.end_date||'':'',
+    fte: entry?String(entry.fte||1):'1',
+    est_hours: entry?String(entry.est_hours||''):'',
+    act_hours: entry?String(entry.act_hours||0):'0',
+  };
+  var _f=useState(def),form=_f[0],setForm=_f[1];
+  var _e=useState(''),error=_e[0],setError=_e[1];
+  var _s=useState(false),saving=_s[0],setSaving=_s[1];
+  function set(k,v){setForm(function(f){return Object.assign({},f,{[k]:v});});}
+
+  var days=calcDays(form.start_date,form.end_date);
+  var rate=MANPOWER_RATES[form.manpower_type]||0;
+  var qty=Math.max(1,parseInt(form.qty)||1);
+  var fte=parseFloat(form.fte)||1;
+  var estH=parseFloat(form.est_hours)||0;
+  var actH=parseFloat(form.act_hours)||0;
+  var estCost=estH*qty*fte*rate;
+  var actCost=actH*qty*fte*rate;
+
+  async function submit(){
+    if(!form.description.trim()) return setError('Description of work is required.');
+    if(!form.est_hours||isNaN(+form.est_hours)||+form.est_hours<0) return setError('Estimated hours is required.');
+    setError(''); setSaving(true);
+    try {
+      await onSave({
+        description:form.description.trim(), manpower_type:form.manpower_type,
+        qty:qty, start_date:form.start_date||null, end_date:form.end_date||null,
+        fte:parseFloat(form.fte)||1, est_hours:estH, act_hours:actH,
+        id:entry?entry.id:undefined, projectId:entry?entry.projectId:projectId,
+      });
+    } catch(e){ setError('Save failed: '+(e.message||'unknown')); setSaving(false); }
+  }
+
+  return (
+    <Modal title={entry?'Edit Manpower Entry':'Add Manpower Entry'} onClose={onClose} w={600}
+      footer={<div style={{display:'flex',gap:9}}>
+        <button onClick={onClose} style={{padding:'8px 18px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:8,color:'var(--c-text3)',fontSize:13}}>Cancel</button>
+        <button onClick={submit} disabled={saving} style={{padding:'8px 20px',background:'#F59E0B',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+          <Ico n="save" size={13}/>{saving?'Saving…':(entry?'Save Changes':'Add Entry')}
+        </button>
+      </div>}>
+      <div className='form-grid-2' style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+
+        {/* Description */}
+        <div style={{gridColumn:'1/-1'}}>
+          <label style={LBL}>Description of Work *</label>
+          <input style={INP} value={form.description} onChange={function(e){set('description',e.target.value);setError('');}} placeholder="e.g. Project Planning & Oversight"/>
+        </div>
+
+        {/* Type */}
+        <div>
+          <label style={LBL}>Manpower Type</label>
+          <select style={Object.assign({},INP,{cursor:'pointer'})} value={form.manpower_type} onChange={function(e){set('manpower_type',e.target.value);}}>
+            {MANPOWER_TYPES.map(function(t){return <option key={t} value={t}>{t} — ${MANPOWER_RATES[t].toLocaleString()}/hr</option>;})}
+          </select>
+        </div>
+
+        {/* Qty */}
+        <div>
+          <label style={LBL}>Quantity (Persons)</label>
+          <input style={INP} type="number" min="1" step="1" value={form.qty} onChange={function(e){set('qty',e.target.value);}} placeholder="1"/>
+        </div>
+
+        {/* Start / End dates */}
+        <div>
+          <label style={LBL}>Start Date</label>
+          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.start_date} onChange={function(e){set('start_date',e.target.value);}}/>
+        </div>
+        <div>
+          <label style={LBL}>End Date</label>
+          <input style={Object.assign({},INP,{colorScheme:'dark'})} type="date" value={form.end_date} onChange={function(e){set('end_date',e.target.value);}}/>
+        </div>
+
+        {/* Days (auto) */}
+        <div>
+          <label style={LBL}>Days (Auto-calculated)</label>
+          <div style={{padding:'9px 12px',background:'var(--c-bg)',border:'1px solid var(--c-border2)',borderRadius:8,fontSize:13.5,fontWeight:600,color:days>0?'#60A5FA':'var(--c-ghost)'}}>
+            {days>0?days+' day'+(days!==1?'s':''):'— set dates above —'}
+          </div>
+        </div>
+
+        {/* FTE */}
+        <div>
+          <label style={LBL}>FTE</label>
+          <input style={INP} type="number" min="0" max="2" step="0.1" value={form.fte} onChange={function(e){set('fte',e.target.value);}} placeholder="1.0"/>
+        </div>
+
+        {/* Est / Act hours */}
+        <div>
+          <label style={LBL}>Estimated Hours (per person) *</label>
+          <input style={INP} type="number" min="0" step="0.5" value={form.est_hours} onChange={function(e){set('est_hours',e.target.value);setError('');}} placeholder="0"/>
+        </div>
+        <div>
+          <label style={LBL}>Actual Hours (per person)</label>
+          <input style={INP} type="number" min="0" step="0.5" value={form.act_hours} onChange={function(e){set('act_hours',e.target.value);}} placeholder="0"/>
+        </div>
+
+        {/* Cost previews */}
+        <div style={{padding:'11px 14px',background:'rgba(96,165,250,.06)',border:'1px solid rgba(96,165,250,.2)',borderRadius:8}}>
+          <div style={{fontSize:10,color:'#60A5FA',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Estimated Cost</div>
+          <div style={{fontSize:10.5,color:'var(--c-text5)',marginBottom:3}}>{qty} pax × {estH}h × ${rate.toLocaleString()}/hr</div>
+          <div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)'}}>${estCost.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>
+        <div style={{padding:'11px 14px',background:'rgba(52,211,153,.06)',border:'1px solid rgba(52,211,153,.2)',borderRadius:8}}>
+          <div style={{fontSize:10,color:'#34D399',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Actual Cost</div>
+          <div style={{fontSize:10.5,color:'var(--c-text5)',marginBottom:3}}>{qty} pax × {actH}h × ${rate.toLocaleString()}/hr</div>
+          <div style={{fontSize:20,fontWeight:700,color:'var(--c-text1)'}}>${actCost.toLocaleString('en-US',{maximumFractionDigits:0})}</div>
+        </div>
+
+        {error&&<div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:8,padding:'10px 12px',background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.3)',borderRadius:8,fontSize:12.5,color:'#F87171'}}><Ico n="alert" size={14}/>{error}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Manpower Section ───────────────────────────────────────── */
+function ManpowerSection(props) {
+  var project=props.project, manpower=props.manpower||[];
+  var onAdd=props.onAdd, onEdit=props.onEdit, onDelete=props.onDelete;
+  var _exp=useState(true),expanded=_exp[0],setExpanded=_exp[1];
+
+  var pm=manpower.filter(function(m){return m.projectId===project.id;});
+
+  var grandEstH=0,grandEstC=0,grandActH=0,grandActC=0;
+  pm.forEach(function(m){
+    var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1;
+    grandEstH+=(m.est_hours||0)*qty; grandActH+=(m.act_hours||0)*qty;
+    var fte2=m.fte||1;
+    grandEstC+=(m.est_hours||0)*qty*fte2*rate; grandActC+=(m.act_hours||0)*qty*fte2*rate;
+  });
+
+  var budgeted = project.manpower_budget||0;
+
+  function exportExcel(){
+    if(!window.XLSX){alert('Excel library not loaded.');return;}
+    var XLSX=window.XLSX;
+    var cols=['Description of Work','Manpower Type','Qty (Persons)','Start Date','End Date','Days','FTE',
+              'Est. Hours (Total)','Est. Cost (USD)','Act. Hours (Total)','Act. Cost (USD)'];
+    var rows=[cols];
+    pm.forEach(function(m){
+      var rate=MANPOWER_RATES[m.manpower_type]||0, qty=m.qty||1, fte=m.fte||1;
+      var days=calcDays(m.start_date,m.end_date);
+      rows.push([
+        m.description||'', m.manpower_type, qty,
+        m.start_date||'', m.end_date||'', days, fte,
+        (m.est_hours||0)*qty, (m.est_hours||0)*qty*fte*rate,
+        (m.act_hours||0)*qty, (m.act_hours||0)*qty*fte*rate,
+      ]);
+    });
+    rows.push([]);
+    rows.push(['─── SUBTOTALS BY TYPE ───']);
+    rows.push(['Type','','Qty','','','','','Est. Hours','Est. Cost','Act. Hours','Act. Cost']);
+    MANPOWER_TYPES.forEach(function(t){
+      var entries=pm.filter(function(m){return m.manpower_type===t;});
+      if(!entries.length)return;
+      var rate=MANPOWER_RATES[t]||0, tEH=0,tAH=0,tEC=0,tAC=0;
+      entries.forEach(function(m){var qty=m.qty||1,fte=m.fte||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*fte*rate;tAC+=(m.act_hours||0)*qty*fte*rate;});
+      rows.push([t,'',entries.reduce(function(s,m){return s+(m.qty||1);},0),'','','','',tEH,tEC,tAH,tAC]);
+    });
+    rows.push([]);
+    rows.push(['GRAND TOTAL','','','','','','',grandEstH,grandEstC,grandActH,grandActC]);
+    if(budgeted>0) rows.push(['BUDGETED MANPOWER COST','','','','','','','',budgeted,'','']);
+
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    /* Column widths */
+    ws['!cols']=[{wch:34},{wch:20},{wch:14},{wch:12},{wch:12},{wch:7},{wch:6},{wch:16},{wch:16},{wch:16},{wch:16}];
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,ws,'Manpower Plan');
+    XLSX.writeFile(wb,(project.name||'Project').replace(/[^a-z0-9]/gi,'_')+'_Manpower.xlsx');
+  }
+
+  var TH={padding:'8px 10px',textAlign:'left',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',background:'var(--c-bg)',whiteSpace:'nowrap'};
+  var THR=Object.assign({},TH,{textAlign:'right'});
+  var TD={padding:'9px 10px',fontSize:12,color:'var(--c-text3)',borderTop:'1px solid var(--c-border)',verticalAlign:'middle'};
+  var TDR=Object.assign({},TD,{textAlign:'right'});
+
+  return (
+    <div style={{marginTop:16,background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
+
+      {/* ── Header ── */}
+      <div style={{padding:'13px 18px',borderBottom:expanded?'1px solid var(--c-border)':'none',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:30,height:30,borderRadius:8,background:'rgba(167,139,250,.12)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Ico n="people" size={14} color={MP_COLOR}/>
+          </div>
+          <div>
+            <div style={{fontSize:13.5,fontWeight:700,color:'var(--c-text1)'}}>Manpower Plan</div>
+            <div style={{fontSize:11,color:'var(--c-text5)'}}>
+              {pm.length} entr{pm.length!==1?'ies':'y'}
+              {budgeted>0&&<span> · Budget: <strong style={{color:MP_COLOR}}>${budgeted.toLocaleString('en-US',{maximumFractionDigits:0})}</strong></span>}
+              &nbsp;·&nbsp;Est: <strong style={{color:'#60A5FA'}}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
+              &nbsp;·&nbsp;Act: <strong style={{color:'#34D399'}}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</strong>
+            </div>
+          </div>
+        </div>
+        <div style={{display:'flex',gap:7,alignItems:'center'}}>
+          <button onClick={exportExcel}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'rgba(52,211,153,.1)',border:'1px solid rgba(52,211,153,.25)',borderRadius:7,color:'#34D399',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            <Ico n="download" size={13}/> Excel
+          </button>
+          <button onClick={function(){setExpanded(!expanded);}}
+            style={{display:'flex',alignItems:'center',gap:4,padding:'6px 10px',background:'transparent',border:'1px solid var(--c-border2)',borderRadius:7,color:'var(--c-text4)',fontSize:12,cursor:'pointer'}}>
+            <Ico n={expanded?'chevr':'chevl'} size={12}/> {expanded?'Hide':'Show'}
+          </button>
+          <button onClick={onAdd}
+            style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#F59E0B',border:'none',borderRadius:7,color:'#000',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+            <Ico n="plus" size={12}/> Add Entry
+          </button>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{overflowX:'auto'}}>
+          {!pm.length&&(
+            <div style={{padding:'32px',textAlign:'center',color:'var(--c-text5)',fontSize:13}}>
+              No manpower entries yet. Click <strong style={{color:'#F59E0B'}}>Add Entry</strong> to start tracking.
+            </div>
+          )}
+          {pm.length>0&&(
+            <table style={{width:'100%',borderCollapse:'collapse',minWidth:980}}>
+              <thead>
+                <tr>
+                  <th style={TH}>Description of Work</th>
+                  <th style={TH}>Type</th>
+                  <th style={THR}>Qty</th>
+                  <th style={TH}>Start Date</th>
+                  <th style={TH}>End Date</th>
+                  <th style={THR}>Days</th>
+                  <th style={THR}>FTE</th>
+                  <th style={THR}>Est. Hours</th>
+                  <th style={THR}>Est. Cost</th>
+                  <th style={THR}>Act. Hours</th>
+                  <th style={THR}>Act. Cost</th>
+                  <th style={TH}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {MANPOWER_TYPES.map(function(type){
+                  var entries=pm.filter(function(m){return m.manpower_type===type;});
+                  if(!entries.length) return null;
+                  var rate=MANPOWER_RATES[type]||0;
+                  var tEH=0,tAH=0,tEC=0,tAC=0;
+                  entries.forEach(function(m){var qty=m.qty||1,fte=m.fte||1;tEH+=(m.est_hours||0)*qty;tAH+=(m.act_hours||0)*qty;tEC+=(m.est_hours||0)*qty*fte*rate;tAC+=(m.act_hours||0)*qty*fte*rate;});
+                  return [
+                    entries.map(function(m,idx){
+                      var days=calcDays(m.start_date,m.end_date);
+                      var qty=m.qty||1,fte=m.fte||1;
+                      var ec=(m.est_hours||0)*qty*fte*rate, ac=(m.act_hours||0)*qty*fte*rate;
+                      return (
+                        <tr key={m.id} style={{background:idx%2===0?'transparent':'rgba(255,255,255,.015)'}}>
+                          <td style={TD}><span style={{color:'var(--c-text2)',fontWeight:500}}>{m.description||'—'}</span></td>
+                          <td style={TD}>
+                            <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:999,fontSize:10.5,fontWeight:600,background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',color:MP_COLOR,whiteSpace:'nowrap'}}>
+                              {m.manpower_type}
+                            </span>
+                          </td>
+                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>{qty}</td>
+                          <td style={TD}>{m.start_date||'—'}</td>
+                          <td style={TD}>{m.end_date||'—'}</td>
+                          <td style={Object.assign({},TDR,{color:'#60A5FA',fontWeight:600})}>{days||'—'}</td>
+                          <td style={TDR}>{(m.fte||1).toFixed(1)}</td>
+                          <td style={Object.assign({},TDR,{color:'#60A5FA'})}>{((m.est_hours||0)*qty).toLocaleString()}</td>
+                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>${ec.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                          <td style={Object.assign({},TDR,{color:'#34D399'})}>{((m.act_hours||0)*qty).toLocaleString()}</td>
+                          <td style={Object.assign({},TDR,{fontWeight:600,color:'var(--c-text2)'})}>${ac.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                          <td style={Object.assign({},TDR,{whiteSpace:'nowrap'})}>
+                            <div style={{display:'flex',gap:4,justifyContent:'flex-end'}}>
+                              <button onClick={function(){onEdit(m);}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:5,padding:'3px 6px',color:'#60A5FA',display:'flex'}}><Ico n="edit" size={10}/></button>
+                              <button onClick={function(){onDelete(m.id);}} style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'3px 6px',color:'#F87171',display:'flex'}}><Ico n="trash" size={10}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    }),
+                    <tr key={'sub-'+type} style={{background:'rgba(167,139,250,.04)'}}>
+                      <td colSpan={7} style={Object.assign({},TD,{fontWeight:700,color:MP_COLOR,fontSize:11,textTransform:'uppercase',letterSpacing:'.4px'})}>
+                        {type} Subtotal
+                        <span style={{fontWeight:400,color:'var(--c-text5)',fontSize:10,marginLeft:6,textTransform:'none',letterSpacing:0}}>
+                          {entries.length} entr{entries.length!==1?'ies':'y'} · ${rate.toLocaleString()}/hr
+                        </span>
+                      </td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>{tEH.toLocaleString()}</td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:MP_COLOR})}>${tEC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399'})}>{tAH.toLocaleString()}</td>
+                      <td style={Object.assign({},TDR,{fontWeight:700,color:MP_COLOR})}>${tAC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                      <td style={TD}/>
+                    </tr>
+                  ];
+                })}
+
+                {/* Grand total */}
+                <tr style={{background:'rgba(245,158,11,.05)'}}>
+                  <td colSpan={7} style={Object.assign({},TD,{fontWeight:700,color:'#F59E0B',fontSize:12.5,textTransform:'uppercase',letterSpacing:'.5px',borderTop:'2px solid rgba(245,158,11,.3)'})}>
+                    Grand Total — All Manpower
+                  </td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>{grandEstH.toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>${grandEstC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#34D399',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>{grandActH.toLocaleString()}</td>
+                  <td style={Object.assign({},TDR,{fontWeight:700,color:'#F59E0B',fontSize:13,borderTop:'2px solid rgba(245,158,11,.3)'})}>${grandActC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                  <td style={Object.assign({},TD,{borderTop:'2px solid rgba(245,158,11,.3)'})}/>
+                </tr>
+
+                {/* Budgeted vs Estimated variance */}
+                {budgeted>0&&(
+                  <tr style={{background:'rgba(96,165,250,.04)'}}>
+                    <td colSpan={7} style={Object.assign({},TD,{fontWeight:600,color:'#60A5FA',fontSize:11.5})}>
+                      Budgeted Manpower Cost
+                    </td>
+                    <td colSpan={2} style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA',fontSize:13})}>${budgeted.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                    <td style={Object.assign({},TDR,{fontWeight:600,fontSize:11.5,color:grandEstC>budgeted?'#F87171':'#34D399'})}>
+                      {grandEstC>budgeted?'▲':'▼'} ${Math.abs(grandEstC-budgeted).toLocaleString('en-US',{maximumFractionDigits:0})} {grandEstC>budgeted?'over':'under'} est.
+                    </td>
+                    <td colSpan={2} style={TD}/>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1798,58 +2245,28 @@ function ManpowerTab(props) {
 /* ── Dashboard ──────────────────────────────────────────────── */
 function Dashboard(props) {
   var projects=props.projects,items=props.items,currency=props.currency,manpower=props.manpower||[];
+  var activities=props.activities||[];
   var rm=useMemo(function(){return mpRatesMap(props.manpowerTypes||DEMO_MANPOWER_TYPES);},[props.manpowerTypes]);
-
-  /* ── Widget visibility (eye toggles) ─── */
-  var _wv=useState(function(){try{return JSON.parse(localStorage.getItem('pf-dash-w')||'{}');}catch(e){return{};}});
-  var wVis=_wv[0],setWVis=_wv[1];
-  function toggleW(id){setWVis(function(v){var n=Object.assign({},v,{[id]:!v[id]});try{localStorage.setItem('pf-dash-w',JSON.stringify(n));}catch(e){}return n;});}
-
-  /* ── Global metrics ─── */
-  var tProcBudget=projects.reduce(function(s,p){return s+(p.budget||0);},0);
-  var tMPBudget=projects.reduce(function(s,p){return s+(p.manpower_budget||0);},0);
-  var tBudget=tProcBudget+tMPBudget;
-  var tProcEst=items.reduce(function(s,i){return s+(i.cost||0);},0);
-  var tProcComm=items.reduce(function(s,i){return s+(isCommitted(i.status)?(i.act_cost!=null?i.act_cost:i.cost):0);},0);
-  var tMPAct=projects.reduce(function(s,p){return s+mpActCostForProject(manpower,p.id,rm);},0);
-  var tMPEst=projects.reduce(function(s,p){return s+mpEstCostForProject(manpower,p.id,rm);},0);
-  var tMPSpend=tMPAct>0?tMPAct:tMPEst;
-  var tCommitted=tProcComm+tMPSpend;
+  var tBudget=projects.reduce(function(s,p){return s+(p.budget||0)+(p.manpower_budget||0);},0);
+  var tProcureSpend=items.reduce(function(s,i){return s+i.cost;},0);
+  var tManpowerSpend=projects.reduce(function(s,p){
+    var ac=mpActCostForProject(manpower,p.id,rm,activities);
+    return s+(ac>0?ac:mpEstCostForProject(manpower,p.id,rm,activities));
+  },0);
+  var tSpend=tProcureSpend+tManpowerSpend;
   var deliv=items.filter(function(i){return i.status==='Delivered';}).length;
-  var committedCt=items.filter(function(i){return isCommitted(i.status);}).length;
-  var pct=tBudget?Math.min(100,Math.round((tCommitted/tBudget)*100)):0;
-  var barCol=pct>100?'#EF4444':pct>85?'#F59E0B':'#34D399';
+  var pct=tBudget?Math.min(100,Math.round((tSpend/tBudget)*100)):0;
+  var barCol=pct>85?'#EF4444':pct>65?'#F59E0B':'#34D399';
+  var chartData=useMemo(function(){return projects.map(function(p){return{name:p.name.split(' ').slice(0,2).join(' '),spend:items.filter(function(i){return i.projectId===p.id;}).reduce(function(s,i){return s+i.cost;},0),color:p.color};});},[ projects,items]);
   var stageRows=STAGES.map(function(s){return{name:s,count:items.filter(function(i){return i.status===s;}).length};});
-
-  var sCurveData=useMemo(function(){return buildSCurveData(items);},[items]);
-  var eacData=useMemo(function(){return buildEACData(projects,items,manpower,props.manpowerTypes);},[projects,items,manpower,props.manpowerTypes]);
-  var cfData=useMemo(function(){return buildCashFlowData(items);},[items]);
-  var cfMaxV=useMemo(function(){return cfData.reduce(function(m,d){return Math.max(m,d.planned,d.committed);},1);},[cfData]);
-
   var cards=[
-    {icon:'dollar',  label:'Total Budget',     value:fmt(tBudget,currency),    sub:projects.length+' projects · '+fmt(tProcBudget,currency)+' proc + '+fmt(tMPBudget,currency)+' MP', color:'#F59E0B'},
-    {icon:'coins',   label:'Committed Spend',  value:fmt(tCommitted,currency), sub:pct+'% of budget · '+committedCt+' items committed',  color:'#3B82F6'},
-    {icon:'package', label:'Procurement Items',value:items.length,             sub:committedCt+' committed · '+deliv+' delivered',       color:'#A78BFA'},
-    {icon:'check',   label:'Delivery Rate',    value:(items.length?Math.round((deliv/items.length)*100):0)+'%', sub:deliv+' of '+items.length+' items delivered', color:'#34D399'},
+    {icon:'dollar', label:'Total Budget', value:fmt(tBudget,currency), sub:projects.length+' projects',    color:'#F59E0B'},
+    {icon:'trend',  label:'Total Spend',  value:fmt(tSpend,currency),  sub:pct+'% utilized',              color:'#3B82F6'},
+    {icon:'package',label:'Total Items',  value:items.length,           sub:deliv+' delivered',             color:'#A78BFA'},
+    {icon:'check',  label:'Completion',   value:(items.length?Math.round((deliv/items.length)*100):0)+'%', sub:deliv+' of '+items.length+' items', color:'#34D399'},
   ];
-
-  function WHead(id,title,icon,col){
-    return <div style={{padding:'13px 18px',borderBottom:wVis[id]?'none':'1px solid var(--c-border)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-      <div style={{display:'flex',alignItems:'center',gap:10}}>
-        <div style={{width:28,height:28,borderRadius:7,background:col+'1a',display:'flex',alignItems:'center',justifyContent:'center'}}><Ico n={icon} size={13} color={col}/></div>
-        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text1)'}}>{title}</span>
-      </div>
-      <button onClick={function(){toggleW(id);}} title={wVis[id]?'Show':'Hide'}
-        style={{background:'transparent',border:'none',padding:5,cursor:'pointer',color:wVis[id]?'var(--c-text5)':'var(--c-text4)',display:'flex',alignItems:'center',borderRadius:6}}>
-        <Ico n={wVis[id]?'eyeoff':'eye'} size={14}/>
-      </button>
-    </div>;
-  }
-
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
-
-      {/* ── Stat cards ── */}
       <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
         {cards.map(function(c){return(
           <div key={c.label} style={{background:'var(--c-surface)',borderRadius:12,border:'1px solid var(--c-border)',padding:'18px 20px'}}>
@@ -1862,208 +2279,72 @@ function Dashboard(props) {
           </div>
         );})}
       </div>
-
-      {/* ── Widget 1: Budget Utilization ── */}
-      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
-        {WHead('util','Budget Utilization','dollar','#F59E0B')}
-        {!wVis['util']&&(
-          <div style={{padding:'16px 18px'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div>
-                <div style={{fontSize:13.5,color:'var(--c-text2)'}}>{fmt(tCommitted,currency)} committed <span style={{color:'var(--c-text5)'}}>of {fmt(tBudget,currency)} budget</span></div>
-                <div style={{fontSize:11,color:'var(--c-text5)',marginTop:2}}>Procurement est: {fmt(tProcEst,currency)} · Committed: {fmt(tProcComm,currency)}</div>
-              </div>
-              <span style={{fontSize:30,fontWeight:700,color:barCol,flexShrink:0}}>{pct}%</span>
-            </div>
-            {/* Procurement pool */}
-            <div style={{marginBottom:12}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-                <span style={{fontSize:11.5,color:'var(--c-text4)',fontWeight:600}}>Procurement Pool</span>
-                <span style={{fontSize:11.5,color:'var(--c-text3)'}}>{fmt(tProcComm,currency)} committed / {fmt(tProcBudget,currency)} budget</span>
-              </div>
-              <div style={{position:'relative',height:10,background:'var(--c-bg)',borderRadius:999,overflow:'hidden',marginBottom:3}}>
-                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tProcBudget?Math.min(100,(tProcEst/tProcBudget)*100)+'%':'0%',background:'rgba(96,165,250,.18)'}}/>
-                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tProcBudget?Math.min(100,(tProcComm/tProcBudget)*100)+'%':'0%',background:'linear-gradient(90deg,#3B82F6cc,#3B82F6)'}}/>
-              </div>
-              <div style={{display:'flex',gap:14,fontSize:10.5,color:'var(--c-text5)'}}>
-                <span><span style={{color:'rgba(96,165,250,.6)'}}>▬</span> Estimated {fmt(tProcEst,currency)}</span>
-                <span><span style={{color:'#3B82F6'}}>▬</span> Committed {fmt(tProcComm,currency)}</span>
-              </div>
-            </div>
-            {/* Manpower pool */}
-            <div style={{marginBottom:18}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
-                <span style={{fontSize:11.5,color:'var(--c-text4)',fontWeight:600}}>Manpower Pool</span>
-                <span style={{fontSize:11.5,color:'var(--c-text3)'}}>{fmt(tMPSpend,currency)} actual / {fmt(tMPBudget,currency)} budget</span>
-              </div>
-              <div style={{position:'relative',height:10,background:'var(--c-bg)',borderRadius:999,overflow:'hidden',marginBottom:3}}>
-                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tMPBudget?Math.min(100,(tMPEst/tMPBudget)*100)+'%':'0%',background:'rgba(167,139,250,.18)'}}/>
-                <div style={{position:'absolute',height:'100%',borderRadius:999,width:tMPBudget?Math.min(100,(tMPSpend/tMPBudget)*100)+'%':'0%',background:'linear-gradient(90deg,'+MP_COLOR+'cc,'+MP_COLOR+')'}}/>
-              </div>
-              <div style={{display:'flex',gap:14,fontSize:10.5,color:'var(--c-text5)'}}>
-                <span><span style={{color:'rgba(167,139,250,.5)'}}>▬</span> Estimated {fmt(tMPEst,currency)}</span>
-                <span><span style={{color:MP_COLOR}}>▬</span> Actual {fmt(tMPSpend,currency)}</span>
-              </div>
-            </div>
-            {/* Per-project rows */}
-            <div style={{borderTop:'1px solid var(--c-border)',paddingTop:14}}>
-              <div style={{fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:10}}>By Project</div>
-              {projects.map(function(p){
-                var procComm=procCommittedForProject(items,p.id);
-                var mpAct=mpActCostForProject(manpower,p.id,rm),mpEst=mpEstCostForProject(manpower,p.id,rm);
-                var mpS=mpAct>0?mpAct:mpEst;
-                var totBudget=(p.budget||0)+(p.manpower_budget||0);
-                var totComm=procComm+mpS;
-                var pp=totBudget?Math.min(100,Math.round((totComm/totBudget)*100)):0;
-                var over=totComm>totBudget;
-                var procPct=p.budget?Math.min(100,Math.round((procComm/p.budget)*100)):0;
-                var mpPct=p.manpower_budget?Math.min(100,Math.round((mpS/p.manpower_budget)*100)):0;
-                return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:12,padding:'7px 0',borderBottom:'1px solid var(--c-border)'}}>
-                  <div style={{width:8,height:8,borderRadius:'50%',background:p.color,flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:5}}>
-                      <span style={{fontSize:12.5,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
-                      {over&&<span style={{fontSize:9.5,color:'#F87171',background:'rgba(248,113,113,.1)',padding:'1px 5px',borderRadius:999,border:'1px solid rgba(248,113,113,.2)',whiteSpace:'nowrap',flexShrink:0}}>OVER BUDGET</span>}
-                    </div>
-                    <div style={{display:'flex',gap:4}}>
-                      <div title="Procurement" style={{flex:p.budget||1,height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
-                        <div style={{height:'100%',borderRadius:999,width:procPct+'%',background:'#3B82F6'}}/>
-                      </div>
-                      {p.manpower_budget>0&&<div title="Manpower" style={{flex:p.manpower_budget||1,height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
-                        <div style={{height:'100%',borderRadius:999,width:mpPct+'%',background:MP_COLOR}}/>
-                      </div>}
-                    </div>
-                  </div>
-                  <div style={{textAlign:'right',flexShrink:0}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:over?'#F87171':'var(--c-text2)'}}>{fmt(totComm,currency)}</div>
-                    <div style={{fontSize:10.5,color:'var(--c-text5)'}}>{pp}% of {fmt(totBudget,currency)}</div>
-                  </div>
-                </div>);
-              })}
-            </div>
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'16px 22px'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:10}}>
+          <div>
+            <div style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',marginBottom:4}}>Budget Utilization</div>
+            <div style={{fontSize:13.5,color:'var(--c-text3)'}}>{fmt(tSpend,currency)} <span style={{color:'var(--c-text5)'}}>of {fmt(tBudget,currency)}</span></div>
           </div>
-        )}
+          <span style={{fontSize:24,fontWeight:700,color:barCol}}>{pct}%</span>
+        </div>
+        <div style={{height:8,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
+          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:'linear-gradient(90deg,'+barCol+'cc,'+barCol+')',transition:'width .5s'}}/>
+        </div>
       </div>
-
-      {/* ── Widget 2: S-Curve Burn-Down ── */}
-      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
-        {WHead('scurve','Spend Burn-Down (S-Curve)','chartline','#60A5FA')}
-        {!wVis['scurve']&&(
-          <div style={{padding:'16px 18px'}}>
-            <div style={{display:'flex',gap:20,marginBottom:12}}>
-              <div style={{fontSize:12,color:'var(--c-text5)'}}>Cumulative planned vs committed spend over delivery schedule. Dashed = planned, solid = committed.</div>
-            </div>
-            {sCurveData.length<2
-              ? <div style={{height:180,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-text5)',fontSize:12}}>Add procurement items with delivery dates to see the S-curve.</div>
-              : <LineChart data={sCurveData} height={220} currency={currency}/>
-            }
-          </div>
-        )}
-      </div>
-
-      {/* ── Widget 3: EAC ── */}
-      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
-        {WHead('eac','Forecast at Completion (EAC)','alert','#FBBF24')}
-        {!wVis['eac']&&(
-          <div style={{overflowX:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',minWidth:720}}>
-              <thead>
-                <tr>{['Project','Proc Budget','Committed','MP Budget','MP Actual','Total Budget','EAC','Variance'].map(function(h){
-                  return <th key={h} style={{padding:'10px 10px',fontSize:9.5,color:'var(--c-text5)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.5px',textAlign:h==='Project'?'left':'right',background:'var(--c-bg)',borderBottom:'1px solid var(--c-border)'}}>{h}</th>;
-                })}</tr>
-              </thead>
-              <tbody>
-                {eacData.map(function(p){
-                  var vCol=p.variance<0?'#F87171':p.variance<p.totalBudget*.1?'#FBBF24':'#34D399';
-                  return <tr key={p.id}>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',fontSize:12.5}}>
-                      <div style={{display:'flex',alignItems:'center',gap:6}}>
-                        <div style={{width:7,height:7,borderRadius:'50%',background:p.color}}/>
-                        <span style={{color:'var(--c-text2)',fontWeight:500}}>{p.name}</span>
-                        {p.overrun&&<span style={{fontSize:9,color:'#F87171',background:'rgba(248,113,113,.1)',padding:'1px 5px',borderRadius:999,border:'1px solid rgba(248,113,113,.25)'}}>OVERRUN</span>}
-                      </div>
-                    </td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:'var(--c-text3)'}}>{fmt(p.procBudget,currency)}</td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:'#60A5FA',fontWeight:600}}>{fmt(p.procComm,currency)}</td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:'var(--c-text3)'}}>{fmt(p.mpBudget,currency)}</td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,color:MP_COLOR}}>{fmt(p.mpEAC,currency)}</td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12.5,fontWeight:700,color:'var(--c-text2)'}}>{fmt(p.totalBudget,currency)}</td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12.5,fontWeight:700,color:p.overrun?'#F87171':'var(--c-text1)'}}>{fmt(p.totalEAC,currency)}</td>
-                    <td style={{padding:'9px 10px',borderBottom:'1px solid var(--c-border)',textAlign:'right',fontSize:12,fontWeight:600,color:vCol}}>
-                      {p.variance>=0?'+':''}{fmt(p.variance,currency)}
-                    </td>
-                  </tr>;
-                })}
-              </tbody>
-              <tfoot>
-                <tr style={{background:'var(--c-bg)'}}>
-                  <td colSpan={5} style={{padding:'10px',fontSize:11,fontWeight:700,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.4px'}}>Portfolio Total</td>
-                  <td style={{padding:'10px',textAlign:'right',fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(eacData.reduce(function(s,p){return s+p.totalBudget;},0),currency)}</td>
-                  <td style={{padding:'10px',textAlign:'right',fontSize:13,fontWeight:700,color:eacData.some(function(p){return p.overrun;})?'#F87171':'#34D399'}}>{fmt(eacData.reduce(function(s,p){return s+p.totalEAC;},0),currency)}</td>
-                  <td style={{padding:'10px',textAlign:'right',fontSize:12,fontWeight:600,color:(function(){var v=eacData.reduce(function(s,p){return s+p.variance;},0);return v>=0?'#34D399':'#F87171';})()}}>
-                    {(function(){var v=eacData.reduce(function(s,p){return s+p.variance;},0);return(v>=0?'+':'')+fmt(v,currency);})()}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Widget 4: Cash Flow / Commitment View ── */}
-      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,overflow:'hidden'}}>
-        {WHead('cashflow','Commitment / Cash Flow','calendar','#A78BFA')}
-        {!wVis['cashflow']&&(
-          <div style={{padding:'16px 18px'}}>
-            {!cfData.length
-              ? <div style={{height:100,display:'flex',alignItems:'center',justifyContent:'center',color:'var(--c-text5)',fontSize:12}}>No items with delivery dates yet.</div>
-              : <div>
-                  <div style={{overflowX:'auto',paddingBottom:8}}>
-                    <div style={{display:'flex',gap:12,minWidth:'max-content',alignItems:'flex-end',paddingBottom:4}}>
-                      {cfData.map(function(m){
-                        var d=new Date(m.month+'-01');
-                        var label=d.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
-                        var planH=Math.max(6,Math.round((m.planned/cfMaxV)*110));
-                        var commH=m.committed>0?Math.max(6,Math.round((m.committed/cfMaxV)*110)):0;
-                        var over=m.committed>m.planned;
-                        return <div key={m.month} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,minWidth:70}}>
-                          <div style={{fontSize:9.5,color:'var(--c-text5)',textAlign:'center'}}>{fmt(m.planned,currency)}</div>
-                          <div style={{display:'flex',gap:5,alignItems:'flex-end',height:120}}>
-                            <div title="Planned" style={{width:22,background:'rgba(96,165,250,.2)',borderRadius:'3px 3px 0 0',height:planH+'px',border:'1px solid rgba(96,165,250,.35)'}}/>
-                            {commH>0&&<div title="Committed" style={{width:22,background:over?'rgba(248,113,113,.45)':'rgba(52,211,153,.35)',borderRadius:'3px 3px 0 0',height:commH+'px',border:'1px solid '+(over?'rgba(248,113,113,.55)':'rgba(52,211,153,.45)')}}/>}
-                          </div>
-                          <div style={{fontSize:10.5,fontWeight:600,color:'var(--c-text4)',textAlign:'center'}}>{label}</div>
-                          {commH>0&&<div style={{fontSize:9,color:over?'#F87171':'#34D399',textAlign:'center'}}>{fmt(m.committed,currency)}</div>}
-                        </div>;
-                      })}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:18,marginTop:4}}>
-                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
-                      <div style={{width:12,height:12,borderRadius:2,background:'rgba(96,165,250,.2)',border:'1px solid rgba(96,165,250,.35)'}}/>Planned
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
-                      <div style={{width:12,height:12,borderRadius:2,background:'rgba(52,211,153,.35)',border:'1px solid rgba(52,211,153,.45)'}}/>Committed
-                    </div>
-                    <div style={{display:'flex',alignItems:'center',gap:6,fontSize:11,color:'var(--c-text5)'}}>
-                      <div style={{width:12,height:12,borderRadius:2,background:'rgba(248,113,113,.45)',border:'1px solid rgba(248,113,113,.55)'}}/>Over Planned
-                    </div>
-                  </div>
-                  {/* Pipeline summary */}
-                  <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--c-border)',display:'flex',gap:18,flexWrap:'wrap'}}>
-                    {stageRows.map(function(row){var cfg=SC[row.name];return <div key={row.name} style={{display:'flex',alignItems:'center',gap:8}}>
-                      <div style={{width:8,height:8,borderRadius:'50%',background:cfg.color}}/>
-                      <span style={{fontSize:12,color:cfg.color,fontWeight:600}}>{row.count}</span>
-                      <span style={{fontSize:11.5,color:'var(--c-text5)'}}>{row.name}</span>
-                    </div>;})}
-                    <div style={{marginLeft:'auto',fontSize:11,color:'var(--c-text5)'}}>Overall delivery: <strong style={{color:'#34D399'}}>{items.length?Math.round((deliv/items.length)*100):0}%</strong></div>
-                  </div>
+      <div className='chart-row' style={{display:'grid',gridTemplateColumns:'1.4fr 1fr',gap:14}}>
+        <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Spend by Project</div>
+          <BarChart data={chartData} height={200} currency={currency}/>
+        </div>
+        <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px',display:'flex',flexDirection:'column'}}>
+          <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Pipeline Overview</div>
+          <div style={{display:'flex',flexDirection:'column',gap:12,flex:1}}>
+            {stageRows.map(function(row){
+              var cfg=SC[row.name],p=items.length?Math.round((row.count/items.length)*100):0;
+              return(<div key={row.name}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                  <span style={{fontSize:12,color:cfg.color}}>{row.name}</span>
+                  <span style={{fontSize:12,color:'var(--c-text5)'}}>{row.count} items ({p}%)</span>
                 </div>
-            }
+                <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p+'%',background:cfg.color,opacity:.7}}/></div>
+              </div>);
+            })}
           </div>
-        )}
+          <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid var(--c-border2)'}}>
+            <div style={{fontSize:10.5,color:'var(--c-text5)',textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>Overall Delivery Rate</div>
+            <div style={{fontSize:22,fontWeight:700,color:'#34D399'}}>{items.length?Math.round((deliv/items.length)*100):0}%</div>
+          </div>
+        </div>
       </div>
-
+      <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:12,padding:'18px 20px'}}>
+        <div style={{fontSize:13,fontWeight:600,color:'var(--c-text2)',marginBottom:14}}>Project Summary</div>
+        {!projects.length&&<div style={{fontSize:13,color:'var(--c-text5)',textAlign:'center',padding:'20px 0'}}>No projects yet.</div>}
+        {projects.map(function(p,idx){
+          var pi=items.filter(function(i){return i.projectId===p.id;});
+          var ps=pi.reduce(function(s,i){return s+i.cost;},0);
+          var mpAct=mpActCostForProject(manpower,p.id,rm,activities);
+          var mpEst=mpEstCostForProject(manpower,p.id,rm,activities);
+          var mpS=mpAct>0?mpAct:mpEst;
+          var totalSpend=ps+mpS;
+          var totalBudget=(p.budget||0)+(p.manpower_budget||0);
+          var pp=totalBudget?Math.min(100,Math.round((totalSpend/totalBudget)*100)):0;
+          var pd=pi.filter(function(i){return i.status==='Delivered';}).length;
+          return(<div key={p.id} style={{display:'flex',alignItems:'center',gap:14,padding:'10px 0',borderBottom:idx<projects.length-1?'1px solid var(--c-border)':'none'}}>
+            <div style={{width:9,height:9,borderRadius:'50%',background:p.color,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+                <span style={{fontSize:13,color:'var(--c-text2)',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</span>
+                {mpS>0&&<span style={{fontSize:10,color:MP_COLOR,background:'rgba(167,139,250,.1)',padding:'1px 6px',borderRadius:999,border:'1px solid rgba(167,139,250,.2)',whiteSpace:'nowrap',flexShrink:0}}>+MP</span>}
+              </div>
+              <div style={{height:3,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:pp+'%',background:p.color}}/></div>
+            </div>
+            <div style={{textAlign:'right',flexShrink:0}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:'var(--c-text2)'}}>{fmt(totalSpend,currency)}</div>
+              <div style={{fontSize:11,color:'var(--c-text5)'}}>{pd}/{pi.length} delivered</div>
+            </div>
+          </div>);
+        })}
+      </div>
     </div>
   );
 }
@@ -2071,26 +2352,23 @@ function Dashboard(props) {
 /* ── Projects List ──────────────────────────────────────────── */
 function ProjectsList(props) {
   var projects=props.projects,items=props.items,currency=props.currency,rates=props.rates,manpower=props.manpower||[],onSelect=props.onSelect,onEdit=props.onEdit,onDelete=props.onDelete;
-  var rm=useMemo(function(){return mpRatesMap(props.manpowerTypes||DEMO_MANPOWER_TYPES);},[props.manpowerTypes]);
+  var acts=props.activities||[];
+  var rm2=useMemo(function(){return mpRatesMap(DEMO_MANPOWER_TYPES);},[]);
   var stats=useMemo(function(){return projects.map(function(p){
     var pi=items.filter(function(i){return i.projectId===p.id;});
+    var spend=pi.reduce(function(s,i){return s+i.cost;},0);
     var projCur=p.currency||currency;
     var hasMixed=pi.some(function(i){return i.item_currency&&i.item_currency!==projCur;});
-    var procComm=procCommittedForProject(items,p.id);
-    var procEst=procEstForProject(items,p.id);
-    var convertedComm=hasMixed&&rates?pi.filter(function(i){return isCommitted(i.status);}).reduce(function(s,i){var ic=i.item_currency||projCur,c=i.act_cost!=null?i.act_cost:i.cost;return s+((rates[ic]&&rates[projCur])?convert(c,ic,projCur,rates):c);},0):null;
-    var procCommDisplay=convertedComm!=null?convertedComm:procComm;
-    var mpAct=mpActCostForProject(manpower,p.id,rm);
-    var mpEst=mpEstCostForProject(manpower,p.id,rm);
+    var convertedSpend=hasMixed&&rates?pi.reduce(function(s,i){var ic=i.item_currency||projCur;return s+((rates[ic]&&rates[projCur])?convert(i.cost,ic,projCur,rates):i.cost);},0):null;
+    var procureSpend=convertedSpend!=null?convertedSpend:spend;
+    var mpAct=mpActCostForProject(manpower,p.id,rm2,acts);
+    var mpEst=mpEstCostForProject(manpower,p.id,rm2,acts);
     var mpSpend=mpAct>0?mpAct:mpEst;
-    var totalCommitted=procCommDisplay+mpSpend;
+    var displaySpend=procureSpend+mpSpend;
     var totalBudget=(p.budget||0)+(p.manpower_budget||0);
-    var procPct=p.budget?Math.min(100,Math.round((procCommDisplay/p.budget)*100)):0;
-    var mpPct=p.manpower_budget?Math.min(100,Math.round((mpSpend/p.manpower_budget)*100)):0;
-    var pct=totalBudget?Math.min(110,Math.round((totalCommitted/totalBudget)*100)):0;
     var sc={};STAGES.forEach(function(s){sc[s]=pi.filter(function(i){return i.status===s;}).length;});
-    return Object.assign({},p,{procComm:procCommDisplay,procEst:procEst,hasMixed:hasMixed,totalCommitted:totalCommitted,pct:pct,procPct:procPct,mpPct:mpPct,sc:sc,mpSpend:mpSpend,totalBudget:totalBudget,over:totalCommitted>totalBudget});
-  });},[projects,items,rates,currency,manpower,rm]);
+    return Object.assign({},p,{spend:spend,convertedSpend:convertedSpend,hasMixed:hasMixed,displaySpend:displaySpend,pct:Math.min(100,Math.round((displaySpend/totalBudget)*100)),sc:sc,mpSpend:mpSpend,totalBudget:totalBudget});
+  });},[projects,items,rates,currency,manpower]);
   return (
     <div style={{display:'flex',flexDirection:'column',gap:18}}>
       <div style={{fontSize:12,color:'var(--c-text5)'}}>{projects.length} project{projects.length!==1?'s':''} · {items.length} equipment items total</div>
@@ -2113,33 +2391,16 @@ function ProjectsList(props) {
                 </div>
               </div>
               <div style={{marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
-                  <span style={{fontSize:11,color:'var(--c-text5)'}}>Committed</span>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    {p.over&&<span style={{fontSize:9.5,color:'#F87171',background:'rgba(248,113,113,.1)',padding:'1px 5px',borderRadius:999,border:'1px solid rgba(248,113,113,.2)'}}>OVER</span>}
-                    <span style={{fontSize:11,color:p.over?'#F87171':'var(--c-text3)'}}>{fmt(p.totalCommitted,p.currency||currency)} / {fmt(p.totalBudget,p.currency||currency)}</span>
-                  </div>
-                </div>
-                {p.hasMixed&&<div style={{fontSize:10,color:'#F59E0B',textAlign:'right',marginBottom:2}}>≈ converted to {p.currency||currency}</div>}
-                <div style={{display:'flex',gap:3,marginBottom:4}}>
-                  <div title="Procurement" style={{flex:Math.max(1,p.budget||0),height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:999,width:p.procPct+'%',background:p.procPct>100?'#EF4444':p.color}}/>
-                  </div>
-                  {p.manpower_budget>0&&<div title="Manpower" style={{flex:Math.max(1,p.manpower_budget||0),height:5,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
-                    <div style={{height:'100%',borderRadius:999,width:p.mpPct+'%',background:p.mpPct>100?'#EF4444':MP_COLOR}}/>
-                  </div>}
-                </div>
-                <div style={{display:'flex',gap:10,fontSize:10,color:'var(--c-text5)'}}>
-                  <span>Proc: {fmt(p.procComm,p.currency||currency)}</span>
-                  {p.mpSpend>0&&<span style={{color:MP_COLOR}}>MP: {fmt(p.mpSpend,p.currency||currency)}</span>}
-                  <span style={{marginLeft:'auto'}}>{p.pct}%</span>
-                </div>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}><span style={{fontSize:11,color:'var(--c-text5)'}}>Total Spend</span><span style={{fontSize:11,color:'var(--c-text3)'}}>{fmt(p.displaySpend,p.currency||currency)} / {fmt(p.totalBudget,p.currency||currency)}</span></div>
+                {p.hasMixed&&p.convertedSpend!=null&&<div style={{fontSize:10,color:'#F59E0B',textAlign:'right',marginBottom:3}}>≈ converted to {p.currency||currency}</div>}
+                {p.mpSpend>0&&<div style={{fontSize:10,color:MP_COLOR,textAlign:'right',marginBottom:3}}>incl. ${p.mpSpend.toLocaleString('en-US',{maximumFractionDigits:0})} manpower</div>}
+                <div style={{height:5,background:'var(--c-bg)',borderRadius:999}}><div style={{height:'100%',borderRadius:999,width:p.pct+'%',background:p.pct>85?'#EF4444':p.color}}/></div>
               </div>
               <div style={{display:'flex',gap:5,marginBottom:14,flexWrap:'wrap'}}>
                 {STAGES.map(function(s){var cnt=p.sc[s]||0,cfg=SC[s];return(<div key={s} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:999,background:cfg.bg,border:'1px solid '+cfg.color+'25'}}><span style={{fontSize:9.5,fontWeight:700,color:cfg.color,textTransform:'uppercase',letterSpacing:'.4px'}}>{s}</span><span style={{fontSize:11.5,fontWeight:700,color:cfg.color}}>{cnt}</span></div>);})}
               </div>
               <button onClick={function(){onSelect(p.id);}} style={{width:'100%',padding:'9px',background:p.color+'14',border:'1px solid '+p.color+'28',borderRadius:8,color:p.color,fontSize:12.5,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                View Project <Ico n="chevr" size={13}/>
+                View Equipment <Ico n="chevr" size={13}/>
               </button>
             </div>
           </div>
@@ -2154,23 +2415,25 @@ function Kanban(props) {
   var project=props.project,items=props.items,categories=props.categories,currency=props.currency,rates=props.rates;
   var onBack=props.onBack,onAdd=props.onAdd,onEdit=props.onEdit,onDelete=props.onDelete,onMove=props.onMove;
   var manpower=props.manpower||[],onAddManpower=props.onAddManpower,onDeleteManpower=props.onDeleteManpower;
+  var activities=props.activities||[], templates=props.templates||[];
+  var onSaveActivity=props.onSaveActivity, onDeleteActivity=props.onDeleteActivity;
+  var onSaveTemplate=props.onSaveTemplate, onApplyTemplate=props.onApplyTemplate;
   var manpowerTypes=props.manpowerTypes||DEMO_MANPOWER_TYPES;
   var rm=useMemo(function(){return mpRatesMap(manpowerTypes);},[manpowerTypes]);
   var _s=useState(''),search=_s[0],setSearch=_s[1];
   var _vt=useState('equipment'),viewTab=_vt[0],setViewTab=_vt[1];
   var pi=useMemo(function(){var q=search.toLowerCase();return items.filter(function(i){return i.projectId===project.id&&(!q||i.name.toLowerCase().includes(q)||i.vendor.toLowerCase().includes(q));});},[items,project.id,search]);
   var allPi=items.filter(function(i){return i.projectId===project.id;});
-  var procEst=allPi.reduce(function(s,i){return s+(i.cost||0);},0);
-  var procComm=procCommittedForProject(items,project.id);
+  var spend=allPi.reduce(function(s,i){return s+i.cost;},0);
   var hasMixedCur=allPi.some(function(i){return i.item_currency&&i.item_currency!==currency;});
-  var mpEstC=mpEstCostForProject(manpower,project.id,rm);
-  var mpActC=mpActCostForProject(manpower,project.id,rm);
+  var convertedSpend=hasMixedCur&&rates?allPi.reduce(function(s,i){var ic=i.item_currency||currency;return s+((rates[ic]&&rates[currency])?convert(i.cost,ic,currency,rates):i.cost);},0):null;
+  var procureSpend=convertedSpend!=null?convertedSpend:spend;
+  var mpEstC=mpEstCostForProject(manpower,project.id,rm,activities);
+  var mpActC=mpActCostForProject(manpower,project.id,rm,activities);
   var mpSpend=mpActC>0?mpActC:mpEstC;
-  var totalCommitted=procComm+mpSpend;
-  var totalEst=procEst+mpEstC;
+  var displaySpend=procureSpend+mpSpend;
   var totalBudget=(project.budget||0)+(project.manpower_budget||0);
-  var pct=Math.min(100,Math.round((totalCommitted/Math.max(1,totalBudget))*100));
-  var pctEst=Math.min(100,Math.round((totalEst/Math.max(1,totalBudget))*100));
+  var pct=Math.min(100,Math.round((displaySpend/Math.max(1,totalBudget))*100));
   var deliv=allPi.filter(function(i){return i.status==='Delivered';}).length;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -2190,44 +2453,31 @@ function Kanban(props) {
           </div>
         </div>
       </div>
-      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(155px,1fr))',gap:10}}>
+      <div className='stat-grid-4' style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:10}}>
         {[
-          {label:'Total Budget',   value:fmt(totalBudget,currency),  sub:project.manpower_budget>0?fmt(project.budget||0,currency)+' proc + '+fmt(project.manpower_budget,currency)+' MP':'Allocated', col:'#F59E0B'},
-          {label:'Proc Committed', value:fmt(procComm,currency),     sub:procEst>procComm?'Est: '+fmt(procEst,currency):'Fully committed',                                                             col:'#3B82F6'},
-          {label:'Manpower',       value:fmt(mpSpend,currency),      sub:mpActC>0?'actual cost':'estimated cost',                                                                                     col:MP_COLOR},
-          {label:'Items',          value:allPi.length,               sub:(allPi.filter(function(i){return isCommitted(i.status);}).length)+' committed · '+deliv+' delivered',                        col:'#A78BFA'},
-          {label:'Committed %',    value:pct+'%',                    sub:'of '+fmt(totalBudget,currency)+' budget',                                                                                    col:pct>100?'#EF4444':pct>85?'#F59E0B':'#34D399'},
-          {label:'Delivery Rate',  value:(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%', sub:deliv+' of '+allPi.length+' items',                                                          col:'#34D399'},
-        ].map(function(r){return(<div key={r.label} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r.label}</div><div style={{fontSize:18,fontWeight:700,color:r.col,lineHeight:1}}>{r.value}</div><div style={{fontSize:10.5,color:'var(--c-text5)',marginTop:3}}>{r.sub}</div></div>);})}
+          ['Budget',fmt(totalBudget,currency),project.manpower_budget>0?'incl. '+fmt(project.manpower_budget,currency)+' manpower':'Allocated'],
+          ['Total Spend',fmt(displaySpend,currency),pct+'% utilized'],
+          ['Manpower',fmt(mpSpend,currency),mpActC>0?'actual cost':'estimated cost'],
+          ['Procurement',fmt(procureSpend,currency),convertedSpend!=null?'converted to '+currency:allPi.length+' items'],
+          ['Items',allPi.length,'Total'],
+          ['Delivered',(allPi.length?Math.round((deliv/allPi.length)*100):0)+'%',deliv+' of '+allPi.length],
+        ].map(function(r){return(<div key={r[0]} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'12px 14px'}}><div style={{fontSize:10,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:4}}>{r[0]}</div><div style={{fontSize:18,fontWeight:700,color:'var(--c-text1)',lineHeight:1}}>{r[1]}</div><div style={{fontSize:11,color:(r[0]==='Manpower')?MP_COLOR:'var(--c-text5)',marginTop:3}}>{r[2]}</div></div>);})}
       </div>
       <div style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'11px 16px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-          <span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization — Committed vs Estimated vs Budget</span>
-          <span style={{fontSize:12,fontWeight:600,color:pct>100?'#EF4444':pct>85?'#F59E0B':'#34D399'}}>{pct}%</span>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:5}}>
+          <div>
+            <span style={{fontSize:11,color:'var(--c-text4)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.5px'}}>Budget Utilization</span>
+            {project.manpower_budget>0&&<span style={{fontSize:10,color:MP_COLOR,marginLeft:8}}>Procurement + Manpower</span>}
+          </div>
+          <span style={{fontSize:12,fontWeight:600,color:pct>85?'#F87171':'#94A3B8'}}>{pct}%</span>
         </div>
-        {/* Procurement pool */}
-        <div style={{marginBottom:6}}>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--c-text5)',marginBottom:3}}>
-            <span>Procurement</span><span>{fmt(procComm,currency)} committed · {fmt(project.budget||0,currency)} budget</span>
-          </div>
-          <div style={{height:7,background:'var(--c-bg)',borderRadius:999,position:'relative',overflow:'hidden'}}>
-            <div style={{position:'absolute',height:'100%',borderRadius:999,width:project.budget?Math.min(100,(procEst/(project.budget||1))*100)+'%':'0%',background:'rgba(59,130,246,.18)'}}/>
-            <div style={{position:'absolute',height:'100%',borderRadius:999,width:project.budget?Math.min(100,(procComm/(project.budget||1))*100)+'%':'0%',background:project.color}}/>
-          </div>
+        <div style={{height:6,background:'var(--c-bg)',borderRadius:999,position:'relative'}}>
+          <div style={{height:'100%',borderRadius:999,width:pct+'%',background:pct>85?'#EF4444':project.color}}/>
+          {totalBudget>0&&mpSpend>0&&<div style={{position:'absolute',top:0,left:Math.min(100,Math.round((procureSpend/totalBudget)*100))+'%',height:'100%',borderRadius:'0 999px 999px 0',width:Math.min(100-Math.min(100,Math.round((procureSpend/totalBudget)*100)),Math.round((mpSpend/totalBudget)*100))+'%',background:MP_COLOR}}/>}
         </div>
-        {/* Manpower pool */}
-        {project.manpower_budget>0&&<div>
-          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--c-text5)',marginBottom:3}}>
-            <span>Manpower</span><span>{fmt(mpSpend,currency)} {mpActC>0?'actual':'estimated'} · {fmt(project.manpower_budget,currency)} budget</span>
-          </div>
-          <div style={{height:7,background:'var(--c-bg)',borderRadius:999,overflow:'hidden'}}>
-            <div style={{height:'100%',borderRadius:999,width:project.manpower_budget?Math.min(100,(mpSpend/(project.manpower_budget||1))*100)+'%':'0%',background:MP_COLOR}}/>
-          </div>
-        </div>}
-        <div style={{display:'flex',gap:14,marginTop:6,fontSize:10,color:'var(--c-text5)'}}>
-          <span><span style={{color:'rgba(59,130,246,.4)'}}>▬</span> Est. {fmt(procEst,currency)}</span>
-          <span><span style={{color:project.color}}>▬</span> Committed {fmt(procComm,currency)}</span>
-          {mpSpend>0&&<span><span style={{color:MP_COLOR}}>▬</span> Manpower {fmt(mpSpend,currency)}</span>}
+        <div style={{display:'flex',gap:12,marginTop:6,fontSize:10,color:'var(--c-text5)'}}>
+          <span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:project.color,display:'inline-block'}}/>Procurement {fmt(procureSpend,currency)}</span>
+          {mpSpend>0&&<span style={{display:'flex',alignItems:'center',gap:4}}><span style={{width:8,height:3,borderRadius:999,background:MP_COLOR,display:'inline-block'}}/>{mpActC>0?'Act.':'Est.'} Manpower {fmt(mpSpend,currency)}</span>}
         </div>
       </div>
 
@@ -2271,10 +2521,8 @@ function Kanban(props) {
                 var orderBy   = item.order_by_date || calcOrderBy(item.delivery_date||item.deadline, item.lead_time_days);
                 var urgency   = urgencyLabel(orderBy, item.status);
                 var itemCur   = item.item_currency || currency;
-                var estCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
-                var actCost = item.act_cost;
-                var totalCost = estCost;
-                var convertedCost = (itemCur!==currency&&rates&&rates[itemCur]&&rates[currency])?convert(actCost!=null?actCost:estCost,itemCur,currency,rates):null;
+                var totalCost = item.cost || ((item.qty||1)*(item.unit_cost||0));
+                var convertedCost = (itemCur!==currency&&rates&&rates[itemCur]&&rates[currency])?convert(totalCost,itemCur,currency,rates):null;
                 return(
                 <div key={item.id} style={{background:'var(--c-surface)',border:'1px solid var(--c-border)',borderRadius:10,padding:'10px 10px 8px',marginBottom:8}}>
                   {/* Name */}
@@ -2283,14 +2531,17 @@ function Kanban(props) {
 
                   {/* Cost breakdown */}
                   <div style={{background:'var(--c-bg)',borderRadius:6,padding:'7px 9px',marginBottom:8}}>
-                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty>1?item.qty+' × '+fmt(item.unit_cost||0,itemCur):item.category}</span>
-                      <div style={{textAlign:'right'}}>
-                        <div style={{fontSize:13,fontWeight:700,color:actCost!=null&&isCommitted(item.status)?'#60A5FA':'var(--c-text2)'}}>{fmt(actCost!=null&&isCommitted(item.status)?actCost:estCost,itemCur)}</div>
-                        {actCost!=null&&isCommitted(item.status)&&actCost!==estCost&&<div style={{fontSize:9.5,color:'var(--c-text5)',textDecoration:'line-through'}}>{fmt(estCost,itemCur)} est.</div>}
+                    {item.qty>1 ? (
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.qty} × {fmt(item.unit_cost||0,itemCur)}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,itemCur)}</span>
                       </div>
-                    </div>
-                    {actCost!=null&&isCommitted(item.status)&&<div style={{fontSize:9.5,color:'#60A5FA',marginTop:2}}>Committed PO amount</div>}
+                    ) : (
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:10.5,color:'var(--c-text5)'}}>{item.category}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:'var(--c-text2)'}}>{fmt(totalCost,itemCur)}</span>
+                      </div>
+                    )}
                     {item.qty>1&&<div style={{fontSize:10,color:'var(--c-ghost)',marginTop:2}}>{item.category}</div>}
                     {itemCur!==currency&&(convertedCost!=null
                       ?<div style={{fontSize:10.5,color:'#F59E0B',marginTop:3,fontWeight:500}}>≈ {fmt(convertedCost,currency)}</div>
@@ -2347,108 +2598,67 @@ function Kanban(props) {
       {viewTab==='manpower'&&<ManpowerTab
         project={project}
         manpower={manpower}
+        activities={activities}
+        templates={templates}
         manpowerTypes={manpowerTypes}
         onSave={onAddManpower}
         onDelete={onDeleteManpower}
+        onSaveActivity={onSaveActivity}
+        onDeleteActivity={onDeleteActivity}
+        onSaveTemplate={onSaveTemplate}
+        onApplyTemplate={onApplyTemplate}
       />}
     </div>
   );
 }
 
-/* ── Manpower Types Settings ─────────────────────────────────── */
-function ManpowerTypesSettings(props) {
-  var types=props.types||[], onAdd=props.onAdd, onUpdate=props.onUpdate, onDelete=props.onDelete, onToast=props.onToast;
-  var _nName=useState(''),nName=_nName[0],setNName=_nName[1];
-  var _nRate=useState(''),nRate=_nRate[0],setNRate=_nRate[1];
-  var _editId=useState(null),editId=_editId[0],setEditId=_editId[1];
-  var _editForm=useState({}),editForm=_editForm[0],setEditForm=_editForm[1];
-
-  var INP2={background:'var(--c-input)',border:'1px solid var(--c-border2)',borderRadius:6,padding:'6px 10px',color:'var(--c-text2)',fontSize:13,width:'100%'};
-  var TH={padding:'8px 12px',textAlign:'left',fontSize:10,color:'var(--c-text5)',fontWeight:600,textTransform:'uppercase',letterSpacing:'.6px',background:'var(--c-bg)'};
-
-  async function add(){
-    var n=nName.trim(), r=parseFloat(nRate);
-    if(!n){onToast('Name is required','warning');return;}
-    if(isNaN(r)||r<0){onToast('Rate must be a valid number','warning');return;}
-    if(types.find(function(t){return t.name.toLowerCase()===n.toLowerCase();})){onToast('Type already exists','warning');return;}
-    await onAdd({name:n,rate_per_day:r});
-    setNName('');setNRate('');
-    onToast('Manpower type "'+n+'" added');
-  }
-
-  async function saveEdit(t){
-    var n=(editForm.name!==undefined?editForm.name:t.name).trim();
-    var r=parseFloat(editForm.rate_per_day!==undefined?editForm.rate_per_day:t.rate_per_day);
-    if(!n){onToast('Name is required','warning');return;}
-    if(isNaN(r)||r<0){onToast('Rate must be a valid number','warning');return;}
-    await onUpdate(Object.assign({},t,{name:n,rate_per_day:r}));
-    setEditId(null);setEditForm({});
-    onToast('Manpower type updated');
-  }
-
+/* ── Manpower Templates Settings ────────────────────────────── */
+function ManpowerTemplatesSettings(props) {
+  var templates=props.templates||[], onDelete=props.onDelete, onToast=props.onToast;
+  var _exp=useState(null),expanded=_exp[0],setExpanded=_exp[1];
   return (
     <div>
       <div style={{fontSize:14,fontWeight:600,color:'var(--c-text1)',display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-        <Ico n="users" size={14} color={MP_COLOR}/> Manpower Types
+        <Ico n="copy" size={14} color={MP_COLOR}/> Manpower Templates
       </div>
-      <p style={{fontSize:12,color:'var(--c-text5)',marginBottom:14}}>Define the roles and their daily rates used in the Manpower plan.</p>
-      <div style={{border:'1px solid var(--c-border)',borderRadius:9,overflow:'hidden',marginBottom:16}}>
-        <table style={{width:'100%',borderCollapse:'collapse'}}>
-          <thead>
-            <tr>
-              {['Role / Type','Rate / Day (USD)','Actions'].map(function(h){return <th key={h} style={TH}>{h}</th>;})}
-            </tr>
-          </thead>
-          <tbody>
-            {types.map(function(t,idx){
-              var isEdit=editId===t.id;
-              return (
-                <tr key={t.id} style={{borderTop:idx>0?'1px solid var(--c-border)':'none'}}>
-                  <td style={{padding:'9px 12px'}}>
-                    {isEdit
-                      ? <input style={Object.assign({},INP2,{width:180})} value={editForm.name!==undefined?editForm.name:t.name} onChange={function(e){setEditForm(function(f){return Object.assign({},f,{name:e.target.value});});}}/>
-                      : <span style={{fontSize:13,fontWeight:600,color:'var(--c-text2)'}}>{t.name}</span>}
-                  </td>
-                  <td style={{padding:'9px 12px'}}>
-                    {isEdit
-                      ? <input type="number" min="0" step="1" style={Object.assign({},INP2,{width:110})} value={editForm.rate_per_day!==undefined?editForm.rate_per_day:t.rate_per_day} onChange={function(e){setEditForm(function(f){return Object.assign({},f,{rate_per_day:e.target.value});});}}/>
-                      : <span style={{fontSize:13,color:MP_COLOR,fontWeight:700}}>${(t.rate_per_day||0).toLocaleString()}/day</span>}
-                  </td>
-                  <td style={{padding:'9px 12px'}}>
-                    <div style={{display:'flex',gap:6}}>
-                      {isEdit
-                        ? <>
-                            <button onClick={function(){saveEdit(t);}} style={{background:'rgba(52,211,153,.12)',border:'1px solid rgba(52,211,153,.25)',borderRadius:6,padding:'4px 11px',color:'#34D399',fontSize:12,cursor:'pointer'}}>Save</button>
-                            <button onClick={function(){setEditId(null);setEditForm({});}} style={{background:'none',border:'1px solid var(--c-border2)',borderRadius:6,padding:'4px 11px',color:'var(--c-text5)',fontSize:12,cursor:'pointer'}}>Cancel</button>
-                          </>
-                        : <>
-                            <button onClick={function(){setEditId(t.id);setEditForm({});}} style={{background:'rgba(96,165,250,.1)',border:'1px solid rgba(96,165,250,.2)',borderRadius:6,padding:'4px 9px',color:'#60A5FA',fontSize:12,cursor:'pointer'}}>Edit</button>
-                            <button onClick={function(){if(window.confirm('Remove "'+t.name+'"?'))onDelete(t.id);}} style={{background:'rgba(248,113,113,.08)',border:'1px solid rgba(248,113,113,.18)',borderRadius:6,padding:'4px 9px',color:'#F87171',fontSize:12,cursor:'pointer'}}>Delete</button>
-                          </>}
+      <p style={{fontSize:12,color:'var(--c-text5)',marginBottom:14}}>Reusable activity structures saved from project Manpower plans.</p>
+      {!templates.length&&<div style={{fontSize:12.5,color:'var(--c-text5)',padding:'14px',background:'var(--c-bg)',borderRadius:8,border:'1px dashed var(--c-border2)',textAlign:'center'}}>No templates yet. Save one from a project's Manpower tab.</div>}
+      {templates.map(function(tpl){
+        var acts = tpl.manpower_template_activities || [];
+        var isExp = expanded===tpl.id;
+        return (
+          <div key={tpl.id} style={{border:'1px solid var(--c-border)',borderRadius:9,marginBottom:10,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:'var(--c-bg)',cursor:'pointer'}} onClick={function(){setExpanded(isExp?null:tpl.id);}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <Ico n={isExp?'chevl':'chevr'} size={12} color="var(--c-text5)"/>
+                <span style={{fontSize:13,fontWeight:600,color:'var(--c-text2)'}}>{tpl.name}</span>
+                <span style={{fontSize:11,color:'var(--c-text5)'}}>{acts.length} activit{acts.length!==1?'ies':'y'}</span>
+              </div>
+              <button onClick={function(e){e.stopPropagation();if(window.confirm('Delete template "'+tpl.name+'"?')){onDelete(tpl.id);onToast('Template deleted','info');}}}
+                style={{background:'rgba(248,113,113,.1)',border:'1px solid rgba(248,113,113,.2)',borderRadius:5,padding:'4px 8px',color:'#F87171',display:'flex',alignItems:'center',cursor:'pointer'}}>
+                <Ico n="trash" size={11}/>
+              </button>
+            </div>
+            {isExp&&acts.length>0&&(
+              <div style={{padding:'8px 14px 12px',borderTop:'1px solid var(--c-border)'}}>
+                {acts.map(function(a){
+                  var entries = a.manpower_template_entries || [];
+                  return (
+                    <div key={a.id} style={{marginBottom:8}}>
+                      <div style={{fontSize:12,fontWeight:600,color:'var(--c-text3)',marginBottom:4}}>{a.name}</div>
+                      {entries.map(function(e){
+                        return <div key={e.id} style={{fontSize:11.5,color:'var(--c-text5)',paddingLeft:12,marginBottom:2}}>
+                          · {e.manpower_type} × {e.qty} (FTE {e.fte})
+                        </div>;
+                      })}
                     </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      {/* Add new type row */}
-      <div style={{display:'flex',gap:8,alignItems:'flex-end'}}>
-        <div style={{flex:2}}>
-          <div style={{fontSize:11,color:'var(--c-text5)',marginBottom:4}}>Role Name</div>
-          <input style={INP2} placeholder="e.g. Site Supervisor" value={nName} onChange={function(e){setNName(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter')add();}}/>
-        </div>
-        <div style={{flex:1}}>
-          <div style={{fontSize:11,color:'var(--c-text5)',marginBottom:4}}>Rate/Day (USD)</div>
-          <input type="number" min="0" step="1" style={INP2} placeholder="e.g. 450" value={nRate} onChange={function(e){setNRate(e.target.value);}}
-            onKeyDown={function(e){if(e.key==='Enter')add();}}/>
-        </div>
-        <button onClick={add} style={{padding:'8px 16px',background:'rgba(167,139,250,.12)',border:'1px solid rgba(167,139,250,.25)',borderRadius:8,color:MP_COLOR,fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer',whiteSpace:'nowrap'}}>
-          <Ico n="plus" size={13}/> Add Type
-        </button>
-      </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2459,7 +2669,7 @@ function SettingsView(props) {
   var currencies=props.currencies, onAddCurrency=props.onAddCurrency, onUpdateCurrency=props.onUpdateCurrency, onDeleteCurrency=props.onDeleteCurrency;
   var categories=props.categories, onAddCat=props.onAddCat, onRemoveCat=props.onRemoveCat;
   var rates=props.rates, ratesUpdated=props.ratesUpdated, onRefreshRates=props.onRefreshRates;
-  var manpowerTypes=props.manpowerTypes||[], onAddMpType=props.onAddMpType, onUpdateMpType=props.onUpdateMpType, onDeleteMpType=props.onDeleteMpType;
+  var templates=props.templates||[], onDeleteTemplate=props.onDeleteTemplate;
   var onToast=props.onToast;
 
   var _nc=useState(''),newCat=_nc[0],setNewCat=_nc[1];
@@ -2641,9 +2851,9 @@ function SettingsView(props) {
         </div>
       </div>
 
-      {/* ── Manpower Types ── */}
+      {/* ── Manpower Templates ── */}
       <div style={Object.assign({},card,{marginBottom:0})}>
-        <ManpowerTypesSettings types={manpowerTypes} onAdd={onAddMpType} onUpdate={onUpdateMpType} onDelete={onDeleteMpType} onToast={onToast}/>
+        <ManpowerTemplatesSettings templates={templates} onDelete={onDeleteTemplate} onToast={onToast}/>
       </div>
     </div>
   );
@@ -2663,6 +2873,8 @@ function App() {
   var _us=useState(DEMO_USERS),users=_us[0],setUsers=_us[1];
   var _mp=useState(DEMO_MANPOWER),manpower=_mp[0],setManpower=_mp[1];
   var _mpt=useState(DEMO_MANPOWER_TYPES),manpowerTypes=_mpt[0],setManpowerTypes=_mpt[1];
+  var _ac=useState(DEMO_ACTIVITIES),activities=_ac[0],setActivities=_ac[1];
+  var _tpl=useState(DEMO_TEMPLATES),templates=_tpl[0],setTemplates=_tpl[1];
   var _dl=useState(false),dataLoading=_dl[0],setDataLoading=_dl[1];
   var _rt=useState(null),rates=_rt[0],setRates=_rt[1];
   var _ru=useState(''),ratesUpdated=_ru[0],setRatesUpdated=_ru[1];
@@ -2732,6 +2944,8 @@ function App() {
       db.from('currencies').select('*').order('code'),
       db.from('manpower_entries').select('*').order('created_at'),
       db.from('manpower_types').select('*').order('name'),
+      db.from('manpower_activities').select('*').order('position').order('created_at'),
+      db.from('manpower_templates').select('*, manpower_template_activities(*, manpower_template_entries(*))').order('created_at'),
     ]).then(function(res){
       if(!res[0].error&&res[0].data)setProjects(res[0].data);
       if(!res[1].error&&res[1].data)setItems(res[1].data.map(toApp));
@@ -2740,6 +2954,8 @@ function App() {
       if(!res[4].error&&res[4].data&&res[4].data.length)setCurrencies(res[4].data);
       if(!res[5].error&&res[5].data)setManpower(res[5].data.map(toAppM));
       if(!res[6].error&&res[6].data&&res[6].data.length)setManpowerTypes(res[6].data);
+      if(!res[7].error&&res[7].data)setActivities(res[7].data.map(toAppM));
+      if(!res[8].error&&res[8].data)setTemplates(res[8].data);
       setDataLoading(false);
     }).catch(function(e){console.error('Load error:',e);setDataLoading(false);});
   },[user]);
@@ -2747,7 +2963,7 @@ function App() {
   /* Logout */
   async function handleLogout(){
     if(db)await db.auth.signOut();
-    setProjects(DEMO_PROJECTS);setItems(DEMO_ITEMS);setCats(DEMO_CATS);setUsers(DEMO_USERS);setManpower(DEMO_MANPOWER);setManpowerTypes(DEMO_MANPOWER_TYPES);
+    setProjects(DEMO_PROJECTS);setItems(DEMO_ITEMS);setCats(DEMO_CATS);setUsers(DEMO_USERS);setManpower(DEMO_MANPOWER);setManpowerTypes(DEMO_MANPOWER_TYPES);setActivities(DEMO_ACTIVITIES);setTemplates(DEMO_TEMPLATES);
   }
 
   /* Project CRUD */
@@ -2835,15 +3051,16 @@ function App() {
       fte:           data.fte,
       est_hours:     data.est_hours,
       act_hours:     data.act_hours,
+      activity_id:   data.activity_id || null,
     };
     if(DEMO||!db){
       if(data.id){
         setManpower(function(p){return p.map(function(m){return m.id===data.id?Object.assign({},m,payload,{id:data.id,projectId:data.projectId}):m;});});
         return data.id;
       } else {
-        var newId=uid();
-        setManpower(function(p){return p.concat([Object.assign({},payload,{id:newId,projectId:data.projectId})]);});
-        return newId;
+        var newMpId=uid();
+        setManpower(function(p){return p.concat([Object.assign({},payload,{id:newMpId,projectId:data.projectId})]);});
+        return newMpId;
       }
     }
     if(data.id){
@@ -2867,28 +3084,112 @@ function App() {
     toast('Manpower entry removed','info');
   }
 
-  /* Manpower Type CRUD */
-  async function addManpowerType(data){
+  /* Activity CRUD */
+  async function saveActivity(data){
+    var payload={name:data.name||'',start_date:data.start_date||null,end_date:data.end_date||null,position:data.position||0};
     if(DEMO||!db){
-      setManpowerTypes(function(p){return p.concat([Object.assign({},data,{id:uid(),created_at:new Date().toISOString()})]);});
+      if(data.id){
+        setActivities(function(p){return p.map(function(a){return a.id===data.id?Object.assign({},a,payload):a;});});
+        return data.id;
+      } else {
+        var newId=uid();
+        setActivities(function(p){return p.concat([Object.assign({},payload,{id:newId,projectId:data.projectId,created_at:new Date().toISOString()})]);});
+        return newId;
+      }
+    }
+    if(data.id){
+      var r=await db.from('manpower_activities').update(payload).eq('id',data.id).select().single();
+      if(r.error){toast('Save failed: '+r.error.message,'error');return;}
+      setActivities(function(p){return p.map(function(a){return a.id===data.id?toAppM(r.data):a;});});
+      return data.id;
+    } else {
+      var r2=await db.from('manpower_activities').insert(Object.assign({},payload,{project_id:data.projectId})).select().single();
+      if(r2.error){toast('Save failed: '+r2.error.message,'error');return;}
+      setActivities(function(p){return p.concat([toAppM(r2.data)]);});
+      return r2.data.id;
+    }
+  }
+  async function deleteActivity(id){
+    if(!DEMO&&db){
+      var r=await db.from('manpower_activities').delete().eq('id',id);
+      if(r.error){toast('Delete failed: '+r.error.message,'error');return;}
+    }
+    setActivities(function(p){return p.filter(function(a){return a.id!==id;});});
+    setManpower(function(p){return p.filter(function(m){return m.activity_id!==id;});});
+    toast('Activity removed','info');
+  }
+
+  /* Template CRUD */
+  async function saveTemplate(name, projectId){
+    var projActs = activities.filter(function(a){return a.projectId===projectId;});
+    if(DEMO||!db){
+      var tplId=uid();
+      var tplActs=projActs.map(function(a){
+        var tActId=uid();
+        var entries=manpower.filter(function(m){return m.activity_id===a.id;}).map(function(m){
+          return {id:uid(),template_activity_id:tActId,manpower_type:m.manpower_type,qty:m.qty||1,fte:m.fte!=null?m.fte:1};
+        });
+        return {id:tActId,template_id:tplId,name:a.name,position:a.position||0,manpower_template_entries:entries};
+      });
+      var newTpl={id:tplId,name:name,description:'',created_at:new Date().toISOString(),manpower_template_activities:tplActs};
+      setTemplates(function(p){return p.concat([newTpl]);});
+      toast('Template "'+name+'" saved');
       return;
     }
-    var r=await db.from('manpower_types').insert({name:data.name,rate_per_day:data.rate_per_day}).select().single();
+    var r=await db.from('manpower_templates').insert({name:name}).select().single();
     if(r.error){toast('Failed: '+r.error.message,'error');return;}
-    setManpowerTypes(function(p){return p.concat([r.data]);});
+    var tplId2=r.data.id;
+    for(var i=0;i<projActs.length;i++){
+      var a=projActs[i];
+      var ra=await db.from('manpower_template_activities').insert({template_id:tplId2,name:a.name,position:a.position||0}).select().single();
+      if(ra.error) continue;
+      var ents=manpower.filter(function(m){return m.activity_id===a.id;});
+      for(var j=0;j<ents.length;j++){
+        var m=ents[j];
+        await db.from('manpower_template_entries').insert({template_activity_id:ra.data.id,manpower_type:m.manpower_type,qty:m.qty||1,fte:m.fte!=null?m.fte:1});
+      }
+    }
+    var rt=await db.from('manpower_templates').select('*, manpower_template_activities(*, manpower_template_entries(*))').eq('id',tplId2).single();
+    if(!rt.error&&rt.data) setTemplates(function(p){return p.concat([rt.data]);});
+    toast('Template "'+name+'" saved');
   }
-  async function updateManpowerType(data){
+  async function applyTemplate(templateId, projectId){
+    var tpl=templates.find(function(t){return t.id===templateId;});
+    if(!tpl)return;
+    var tplActs=tpl.manpower_template_activities||[];
+    var basePos=activities.filter(function(a){return a.projectId===projectId;}).length;
     if(DEMO||!db){
-      setManpowerTypes(function(p){return p.map(function(t){return t.id===data.id?Object.assign({},t,data):t;});});
+      for(var i=0;i<tplActs.length;i++){
+        var ta=tplActs[i];
+        var newActId=uid();
+        setActivities(function(p){return p.concat([{id:newActId,projectId:projectId,name:ta.name,start_date:null,end_date:null,position:basePos+i,created_at:new Date().toISOString()}]);});
+        var entries=ta.manpower_template_entries||[];
+        for(var j=0;j<entries.length;j++){
+          var e=entries[j];
+          setManpower(function(p){return p.concat([{id:uid(),projectId:projectId,activity_id:newActId,description:'',manpower_type:e.manpower_type,qty:e.qty||1,fte:e.fte!=null?e.fte:1,est_hours:0,act_hours:0}]);});
+        }
+      }
+      toast('Template applied');
       return;
     }
-    await db.from('manpower_types').update({name:data.name,rate_per_day:data.rate_per_day}).eq('id',data.id);
-    setManpowerTypes(function(p){return p.map(function(t){return t.id===data.id?Object.assign({},t,data):t;});});
+    for(var ii=0;ii<tplActs.length;ii++){
+      var ta2=tplActs[ii];
+      var ra2=await db.from('manpower_activities').insert({project_id:projectId,name:ta2.name,position:basePos+ii}).select().single();
+      if(ra2.error) continue;
+      var ents2=ta2.manpower_template_entries||[];
+      for(var jj=0;jj<ents2.length;jj++){
+        var e2=ents2[jj];
+        var me=await db.from('manpower_entries').insert({project_id:projectId,activity_id:ra2.data.id,description:'',manpower_type:e2.manpower_type,qty:e2.qty||1,fte:e2.fte!=null?e2.fte:1,est_hours:0,act_hours:0}).select().single();
+        if(!me.error&&me.data) setManpower(function(p){return p.concat([toAppM(me.data)]);});
+      }
+      setActivities(function(p){return p.concat([toAppM(ra2.data)]);});
+    }
+    toast('Template applied');
   }
-  async function deleteManpowerType(id){
-    if(!DEMO&&db)await db.from('manpower_types').delete().eq('id',id);
-    setManpowerTypes(function(p){return p.filter(function(t){return t.id!==id;});});
-    toast('Manpower type removed','info');
+  async function deleteTemplate(id){
+    if(!DEMO&&db)await db.from('manpower_templates').delete().eq('id',id);
+    setTemplates(function(p){return p.filter(function(t){return t.id!==id;});});
+    toast('Template deleted','info');
   }
 
   /* Category CRUD */
@@ -3085,11 +3386,11 @@ function App() {
         {/* Page body */}
         <main className="main-scroll page-pad" style={{flex:1,overflowY:'auto',padding:'20px 24px',WebkitOverflowScrolling:'touch'}}>
           {dataLoading&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',height:200,gap:10,color:'var(--c-text5)',fontSize:13}}><div style={{width:20,height:20,border:'2px solid var(--c-border)',borderTop:'2px solid #F59E0B',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>Loading…</div>}
-          {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency} manpower={manpower} manpowerTypes={manpowerTypes}/>}
-          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} manpower={manpower} manpowerTypes={manpowerTypes} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
-          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} manpower={manpower} manpowerTypes={manpowerTypes} onAddManpower={saveManpower} onEditManpower={saveManpower} onDeleteManpower={deleteManpower} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
+          {!dataLoading&&tab==='dashboard'&&<Dashboard projects={projects} items={items} currency={currency} manpower={manpower} manpowerTypes={manpowerTypes} activities={activities}/>}
+          {!dataLoading&&tab==='projects'&&!pid&&<ProjectsList projects={projects} items={items} currency={currency} rates={rates} manpower={manpower} manpowerTypes={manpowerTypes} activities={activities} onSelect={function(id){setPid(id);}} onEdit={function(p){setEditProj(p);setShowProj(true);}} onDelete={deleteProject}/>}
+          {!dataLoading&&tab==='projects'&&pid&&selProj&&<Kanban project={selProj} items={items} categories={categories} currency={selProj.currency||currency} rates={rates} manpower={manpower} manpowerTypes={manpowerTypes} activities={activities} templates={templates} onAddManpower={saveManpower} onEditManpower={saveManpower} onDeleteManpower={deleteManpower} onSaveActivity={saveActivity} onDeleteActivity={deleteActivity} onSaveTemplate={saveTemplate} onApplyTemplate={applyTemplate} onBack={function(){setPid(null);}} onAdd={function(s){setDefStage(s);setEditItem(null);setShowItem(true);}} onEdit={function(item){setEditItem(item);setShowItem(true);}} onDelete={deleteItem} onMove={moveItem}/>}
           {tab==='team'&&<TeamView users={users} currentUser={user} onAdd={function(){setShowAddUser(true);}} onUpdate={updateUser} onDelete={deleteUser} onReset={resetPassword} onToggleActive={toggleActive} onToast={toast}/>}
-          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} manpowerTypes={manpowerTypes} onAddMpType={addManpowerType} onUpdateMpType={updateManpowerType} onDeleteMpType={deleteManpowerType} onToast={toast}/>}
+          {tab==='settings'&&<SettingsView currency={currency} setCurrency={setCurrency} currencies={currencies} onAddCurrency={addCurrency} onUpdateCurrency={updateCurrency} onDeleteCurrency={deleteCurrency} categories={categories} onAddCat={addCat} onRemoveCat={removeCat} rates={rates} ratesUpdated={ratesUpdated} onRefreshRates={fetchRates} templates={templates} onDeleteTemplate={deleteTemplate} onToast={toast}/>}
         </main>
       </div>
 
