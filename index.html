@@ -1520,19 +1520,21 @@ function ManpowerTab(props) {
     var m=rp.m, bdays=rp.bdays||0, activityId=rp.activityId;
     var _q=useState(String(m.qty!=null?m.qty:1)),qty=_q[0],setQty=_q[1];
     var _ft=useState(String(m.fte!=null?m.fte:1)),fteStr=_ft[0],setFteStr=_ft[1];
+    var _ftf=useState(false),ftFocused=_ftf[0],setFtFocused=_ftf[1];
     var _ad=useState(String(m.act_hours!=null?m.act_hours:0)),adStr=_ad[0],setAdStr=_ad[1];
     useEffect(function(){setQty(String(m.qty!=null?m.qty:1));},[m.qty]);
-    useEffect(function(){var ext=m.fte!=null?m.fte:1;if(parseFloat(fteStr)!==ext)setFteStr(String(ext));},[m.fte]);
+    useEffect(function(){var ext=m.fte!=null?m.fte:1;if(!ftFocused&&parseFloat(fteStr)!==ext)setFteStr(String(ext));},[m.fte,ftFocused]);
     useEffect(function(){setAdStr(String(m.act_hours!=null?m.act_hours:0));},[m.act_hours]);
 
     var rate=rm[m.manpower_type]||0;
     var qtyN=Math.max(1,parseInt(qty)||1);
-    var fteN=clampFte(fteStr);
+    var fteN=clampFte(fteStr.replace(/\.+$/,''));
     var adN=Math.max(0,parseFloat(adStr)||0);
     var estC=rate*bdays*fteN*qtyN, actC=rate*adN*fteN*qtyN;
 
     function save(over){
-      onSaveEntry(Object.assign({id:m.id,manpower_type:m.manpower_type,qty:qtyN,fte:fteN,est_hours:bdays,act_hours:adN,projectId:project.id,activity_id:activityId},over||{}));
+      var safeFteN=clampFte(fteStr.replace(/\.+$/,''));
+      onSaveEntry(Object.assign({id:m.id,manpower_type:m.manpower_type,qty:qtyN,fte:safeFteN,est_hours:bdays,act_hours:adN,projectId:project.id,activity_id:activityId},over||{}));
     }
     return (
       <tr onMouseEnter={function(e){e.currentTarget.style.background='rgba(255,255,255,.025)';}}
@@ -1554,7 +1556,8 @@ function ManpowerTab(props) {
         <td style={TDE}>
           <input type="text" inputMode="decimal" placeholder="0–1" value={fteStr}
             onChange={function(e){setFteStr(e.target.value);}}
-            onBlur={function(){var clamped=String(clampFte(fteStr.replace(/\.+$/,'')));setFteStr(clamped);save();}}
+            onFocus={function(){setFtFocused(true);}}
+            onBlur={function(){setFtFocused(false);var clamped=String(clampFte(fteStr.replace(/\.+$/,'')));setFteStr(clamped);save();}}
             style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
@@ -1671,8 +1674,9 @@ function ManpowerTab(props) {
             </div>
             {/* Add Role button */}
             <div style={{padding:'7px 10px',borderTop:'1px solid var(--c-border)'}}>
-              <button
-                onClick={function(){
+              <button type="button"
+                onClick={function(e){
+                  e.preventDefault();
                   onSaveEntry({manpower_type:(manpowerTypes[0]&&manpowerTypes[0].name)||'',qty:1,fte:1,est_hours:bdays,act_hours:0,projectId:project.id,activity_id:act.id});
                   if(collapsed[act.id]) setCollapsed(function(c){return Object.assign({},c,{[act.id]:false});});
                 }}
