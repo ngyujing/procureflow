@@ -1583,7 +1583,7 @@ function ManpowerTab(props) {
         <td style={TDE}>
           <input type="text" inputMode="decimal" placeholder="0–1" value={form.fte}
             onChange={function(e){setForm(upd(form,'fte',e.target.value));}}
-            onBlur={function(e){var f=upd(form,'fte',String(clampFte(e.target.value)));setForm(f);onAutoSave(f);}}
+            onBlur={function(e){var raw=e.target.value.replace(/\.+$/,'');var f=upd(form,'fte',String(clampFte(raw)));setForm(f);onAutoSave(f);}}
             style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={Object.assign({},TDE,{textAlign:'right',fontWeight:700,color:'#60A5FA',whiteSpace:'nowrap'})}>${c.estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
@@ -1611,7 +1611,7 @@ function ManpowerTab(props) {
     var _ft=useState(String(m.fte!=null?m.fte:1)),fteStr=_ft[0],setFteStr=_ft[1];
     var _ad=useState(String(m.act_hours!=null?m.act_hours:0)),adStr=_ad[0],setAdStr=_ad[1];
     useEffect(function(){setQty(String(m.qty!=null?m.qty:1));},[m.qty]);
-    useEffect(function(){setFteStr(String(m.fte!=null?m.fte:1));},[m.fte]);
+    useEffect(function(){var ext=m.fte!=null?m.fte:1;if(parseFloat(fteStr)!==ext)setFteStr(String(ext));},[m.fte]);
     useEffect(function(){setAdStr(String(m.act_hours!=null?m.act_hours:0));},[m.act_hours]);
 
     var rate=rm[m.manpower_type]||0;
@@ -1643,7 +1643,7 @@ function ManpowerTab(props) {
         <td style={TDE}>
           <input type="text" inputMode="decimal" placeholder="0–1" value={fteStr}
             onChange={function(e){setFteStr(e.target.value);}}
-            onBlur={function(){setFteStr(String(clampFte(fteStr)));save();}}
+            onBlur={function(){var clamped=String(clampFte(fteStr.replace(/\.+$/,'')));setFteStr(clamped);save();}}
             style={Object.assign({},ISM,{width:'100%',textAlign:'right'})}/>
         </td>
         <td style={Object.assign({},TDR,{fontWeight:700,color:'#60A5FA'})}>${estC.toLocaleString('en-US',{maximumFractionDigits:0})}</td>
